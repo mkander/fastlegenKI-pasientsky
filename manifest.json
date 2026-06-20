@@ -3,7 +3,6 @@
   "name": "FastlegeKI → PasientSky overføring",
   "version": "1.0.0",
   "description": "Overfører notattekst fra FastlegeKI til journalfelter i PasientSky, delt opp på konfigurerbare overskrifter.",
-  "default_locale": "no",
   "permissions": ["storage", "activeTab"],
   "host_permissions": [
     "*://*.fastlegen.com/*",
