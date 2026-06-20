@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "FastlegeKI → PasientSky overføring",
+  "version": "1.0.0",
+  "description": "Overfører notattekst fra FastlegeKI til journalfelter i PasientSky, delt opp på konfigurerbare overskrifter.",
+  "default_locale": "no",
+  "permissions": ["storage", "activeTab"],
+  "host_permissions": [
+    "*://*.fastlegen.com/*",
+    "*://*.pasientsky.no/*"
+  ],
+  "options_page": "options.html",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "FastlegeKI → PasientSky"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://*.fastlegen.com/*"],
+      "js": ["util.js", "source.js"],
+      "css": ["ui.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["*://*.pasientsky.no/*"],
+      "js": ["util.js", "destination.js"],
+      "css": ["ui.css"],
+      "all_frames": true,
+      "run_at": "document_idle"
+    }
+  ]
+}

@@ -1,0 +1,79 @@
+/* ui.css — flytende knapp (kilde), panel (mål) og toast. Egne klasser med
+   prefiks flk- og høy z-index for å unngå konflikt med vertsidene. */
+
+#flk-transfer-btn.flk-fab {
+  position: fixed;
+  left: 20px;
+  bottom: 20px;
+  z-index: 2147483646;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 18px;
+  border: none;
+  border-radius: 28px;
+  background: #0052e6;
+  color: #fff;
+  font: 600 14px/1 Roboto, "Segoe UI", system-ui, sans-serif;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
+  transition: background 0.15s, transform 0.1s;
+}
+#flk-transfer-btn.flk-fab:hover { background: #0046c7; }
+#flk-transfer-btn.flk-fab:active { transform: translateY(1px); }
+#flk-transfer-btn .flk-fab-icon { font-size: 18px; line-height: 1; }
+
+.flk-panel {
+  position: fixed;
+  left: 20px;
+  bottom: 20px;
+  z-index: 2147483646;
+  width: 210px;
+  padding: 12px;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #1a1a1a;
+  font: 400 13px/1.35 Roboto, "Segoe UI", system-ui, sans-serif;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.25);
+  border: 1px solid #e2e6ee;
+}
+.flk-panel-title { font-weight: 700; font-size: 12px; color: #0052e6; margin-bottom: 6px; }
+.flk-panel-status { font-size: 11px; color: #5a6472; margin-bottom: 8px; min-height: 26px; }
+.flk-btn {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  padding: 9px 10px;
+  border: 1px solid #cfd6e4;
+  border-radius: 8px;
+  background: #f4f6fb;
+  color: #1a1a1a;
+  font: 600 13px/1 inherit;
+  cursor: pointer;
+}
+.flk-btn:hover { background: #e9edf6; }
+.flk-btn.flk-primary { background: #0052e6; color: #fff; border-color: #0052e6; }
+.flk-btn.flk-primary:hover { background: #0046c7; }
+.flk-btn.flk-primary.flk-ready { box-shadow: 0 0 0 3px rgba(0, 82, 230, 0.25); }
+.flk-btn.flk-active { background: #ffb020; color: #1a1a1a; border-color: #e09a00; }
+
+.flk-toast {
+  position: fixed;
+  left: 20px;
+  bottom: 80px;
+  z-index: 2147483647;
+  max-width: 320px;
+  padding: 11px 14px;
+  border-radius: 10px;
+  background: #232a36;
+  color: #fff;
+  font: 500 13px/1.35 Roboto, "Segoe UI", system-ui, sans-serif;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+  opacity: 0;
+  transform: translateY(8px);
+  pointer-events: none;
+  transition: opacity 0.18s, transform 0.18s;
+}
+.flk-toast.flk-show { opacity: 1; transform: translateY(0); }
+.flk-toast.flk-ok { background: #137a3f; }
+.flk-toast.flk-error { background: #b3261e; }

@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+  <meta charset="UTF-8" />
+  <title>Innstillinger – FastlegeKI → PasientSky</title>
+  <style>
+    body { font: 14px/1.5 Roboto, "Segoe UI", system-ui, sans-serif; color: #1a1a1a; max-width: 640px; margin: 24px auto; padding: 0 16px; }
+    h1 { font-size: 20px; color: #0052e6; }
+    h2 { font-size: 15px; margin-top: 28px; }
+    label { display: block; font-weight: 600; margin: 14px 0 4px; }
+    input[type="text"] { width: 100%; padding: 9px 10px; border: 1px solid #cfd6e4; border-radius: 8px; box-sizing: border-box; font: inherit; }
+    .row { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+    .row input[type="checkbox"] { width: 16px; height: 16px; }
+    .hint { color: #5a6472; font-size: 12px; margin-top: 4px; }
+    button { margin-top: 18px; margin-right: 8px; padding: 10px 16px; border: none; border-radius: 8px; background: #0052e6; color: #fff; font: 600 14px inherit; cursor: pointer; }
+    button.secondary { background: #f4f6fb; color: #1a1a1a; border: 1px solid #cfd6e4; }
+    #status { margin-left: 8px; color: #137a3f; font-weight: 600; }
+    .map { background: #f4f6fb; border: 1px solid #e2e6ee; border-radius: 8px; padding: 10px 12px; font-size: 12px; white-space: pre-wrap; word-break: break-all; }
+  </style>
+</head>
+<body>
+  <h1>FastlegeKI → PasientSky</h1>
+  <p>Notatet fra FastlegeKI deles på overskriftene under, og hver del legges i sitt felt i PasientSky.</p>
+
+  <h2>Overskrifter (i feltrekkefølge)</h2>
+  <p class="hint">Skriv de faktiske overskriftene slik de står i notatet. Felt 1 får teksten under overskrift 1, osv. Kolon, markdown (**, #) og store/små bokstaver ignoreres ved sammenligning.</p>
+  <label for="h1">Overskrift for Felt 1</label>
+  <input type="text" id="h1" />
+  <label for="h2">Overskrift for Felt 2</label>
+  <input type="text" id="h2" />
+  <label for="h3">Overskrift for Felt 3</label>
+  <input type="text" id="h3" />
+  <label for="h4">Overskrift for Felt 4</label>
+  <input type="text" id="h4" />
+
+  <div class="row">
+    <input type="checkbox" id="includeHeading" />
+    <label for="includeHeading" style="margin:0;">Ta med selve overskriftslinjen i feltet</label>
+  </div>
+
+  <h2>Kildefelt i FastlegeKI</h2>
+  <label for="sourceField">CSS-selektor for feltet det kopieres fra</label>
+  <input type="text" id="sourceField" />
+  <p class="hint">Standard: <code>#responseBox</code> (notatfeltet). Endre kun om du vil kopiere fra et annet felt.</p>
+
+  <h2>Kobling av PasientSky-felt</h2>
+  <p class="hint">Feltene kobles ved å klikke på dem i PasientSky (knappen «Koble felt» nede til venstre). Status:</p>
+  <div id="mapStatus" class="map">Laster…</div>
+  <button id="resetMap" class="secondary" type="button">Nullstill feltkobling</button>
+
+  <div>
+    <button id="save" type="button">Lagre innstillinger</button>
+    <button id="restoreDefaults" class="secondary" type="button">Tilbakestill overskrifter</button>
+    <span id="status"></span>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>

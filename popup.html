@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    body { width: 240px; margin: 0; padding: 14px; font: 13px/1.4 Roboto, "Segoe UI", system-ui, sans-serif; color: #1a1a1a; }
+    h1 { font-size: 14px; color: #0052e6; margin: 0 0 10px; }
+    button { display: block; width: 100%; margin-bottom: 8px; padding: 9px; border: 1px solid #cfd6e4; border-radius: 8px; background: #f4f6fb; font: 600 13px inherit; cursor: pointer; }
+    button.primary { background: #0052e6; color: #fff; border-color: #0052e6; }
+    .ctx { font-size: 11px; color: #5a6472; margin-bottom: 10px; }
+    a { color: #0052e6; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <h1>FastlegeKI → PasientSky</h1>
+  <div id="ctx" class="ctx">…</div>
+  <button id="transfer" class="primary">Overfør tekst (FastlegeKI)</button>
+  <button id="learn">Koble felt (PasientSky)</button>
+  <button id="paste">Lim inn tekst (PasientSky)</button>
+  <a href="#" id="opts">Åpne innstillinger</a>
+  <script src="popup.js"></script>
+</body>
+</html>
