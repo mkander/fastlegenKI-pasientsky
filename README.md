@@ -6,12 +6,13 @@ konfigurerer, og hver del legges i sitt felt i PasientSky.
 
 ## Hvordan det virker
 
-1. **Kilde (FastlegeKI):** En flytende knapp **«Overfør tekst»** nede til venstre.
-   Ved klikk leses notatfeltet (`#responseBox`), teksten deles på de konfigurerte
-   overskriftene, og delene lagres.
-2. **Mål (PasientSky):** Et lite panel nede til venstre med **«Koble felt»** og
-   **«Lim inn tekst»**. Når teksten er overført fra FastlegeKI, fylles de koblede
-   feltene automatisk (du kan også trykke «Lim inn tekst» manuelt).
+1. **Kilde (FastlegeKI):** En flytende knapp **«Overfør tekst»** som hovrer
+   nederst til venstre inni notatfeltet (`#responseBox`). Ved klikk leses
+   notatteksten, deles på de konfigurerte overskriftene, og delene lagres.
+2. **Mål (PasientSky):** Et lite panel nede til venstre med **«Koble felt»**.
+   Når teksten er overført fra FastlegeKI, fylles de koblede feltene automatisk.
+   Panelet skjuler seg når alle 4 felt er koblet, og kommer fram igjen når du
+   starter feltkobling på nytt (panel-knappen eller utvidelsens popup-knapp).
 
 Fordi PasientSky er bygd opp av mange iframes, kan ikke faste selektorer for
 feltene leses ut på forhånd. Derfor brukes en **lær-felt-modus**: du klikker selv
@@ -37,9 +38,8 @@ så felter inne i iframes treffes også.
 
 ## Daglig bruk
 
-1. I FastlegeKI: trykk **«Overfør tekst»**.
-2. Bytt til PasientSky-fanen – feltene fylles automatisk (eller trykk
-   **«Lim inn tekst»**).
+1. I FastlegeKI: trykk **«Overfør tekst»** (knappen inni notatfeltet).
+2. Bytt til PasientSky-fanen – feltene fylles automatisk.
 
 ## Innstillinger
 

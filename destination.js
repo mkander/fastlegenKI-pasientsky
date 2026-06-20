@@ -115,7 +115,6 @@
 
     const learnBtn = panel.querySelector("#flk-learn");
     const statusEl = panel.querySelector("#flk-status");
-    const pasteBtn = panel.querySelector("#flk-paste");
 
     if (st.active) {
       learnBtn.textContent = "Avbryt kobling (felt " + (st.index + 1) + "/4)";
@@ -125,11 +124,15 @@
       learnBtn.classList.remove("flk-active");
     }
 
-    const fresh = transfer && Date.now() - transfer.ts < 10 * 60 * 1000;
-    pasteBtn.classList.toggle("flk-ready", !!fresh);
     statusEl.textContent =
       (mapped >= 4 ? "Felter koblet. " : "Mangler kobling (" + mapped + "/4). ") +
       (transfer ? "Tekst klar." : "Ingen tekst.");
+
+    // Skjul boksen når alle 4 felt er koblet og kobling ikke pågår.
+    // Den vises igjen når feltkobling startes (panel-knapp eller utvidelsesknapp),
+    // eller hvis koblingen ikke er fullført.
+    const shouldShow = st.active || mapped < 4;
+    panel.style.display = shouldShow ? "" : "none";
   }
 
   async function toggleLearn() {
@@ -151,11 +154,9 @@
     panel.innerHTML =
       '<div class="flk-panel-title">FastlegeKI → PasientSky</div>' +
       '<div id="flk-status" class="flk-panel-status">…</div>' +
-      '<button id="flk-learn" type="button" class="flk-btn">Koble felt</button>' +
-      '<button id="flk-paste" type="button" class="flk-btn flk-primary">Lim inn tekst</button>';
+      '<button id="flk-learn" type="button" class="flk-btn">Koble felt</button>';
     document.body.appendChild(panel);
     panel.querySelector("#flk-learn").addEventListener("click", toggleLearn);
-    panel.querySelector("#flk-paste").addEventListener("click", doFill);
     updatePanel();
   }
 

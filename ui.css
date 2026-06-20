@@ -4,6 +4,7 @@
 #flk-transfer-btn.flk-fab {
   position: fixed;
   left: 20px;
+  top: auto;
   bottom: 20px;
   z-index: 2147483646;
   display: inline-flex;
@@ -22,6 +23,18 @@
 #flk-transfer-btn.flk-fab:hover { background: #0046c7; }
 #flk-transfer-btn.flk-fab:active { transform: translateY(1px); }
 #flk-transfer-btn .flk-fab-icon { font-size: 18px; line-height: 1; }
+
+/* Variant som hovrer inni kildefeltet (posisjon settes av JS via left/top) */
+#flk-transfer-btn.flk-fab-inbox {
+  bottom: auto;
+  padding: 7px 13px;
+  border-radius: 18px;
+  font-size: 12.5px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  opacity: 0.92;
+}
+#flk-transfer-btn.flk-fab-inbox:hover { opacity: 1; }
+#flk-transfer-btn.flk-fab-inbox .flk-fab-icon { font-size: 15px; }
 
 .flk-panel {
   position: fixed;
