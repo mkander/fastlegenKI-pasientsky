@@ -8,7 +8,9 @@
 (function () {
   "use strict";
   const F = window.FLK;
-  if (!F || window.top !== window.self) return; // kun toppvinduet
+  if (!F) { console.error("[FLK] util.js (window.FLK) lastet ikke – kilde-script avbrutt"); return; }
+  if (window.top !== window.self) return; // kun toppvinduet
+  console.log("[FLK] kilde-script lastet på", location.href);
 
   let btn = null;
   let sourceSelector = "#responseBox";
@@ -30,31 +32,37 @@
   }
 
   async function transfer() {
-    const settings = await F.getSettings();
-    const field = findSourceField(settings.sourceField);
-    if (!field) {
-      F.toast("Fant ikke kildefeltet (" + settings.sourceField + ").", "error");
-      return;
-    }
-    const text = readValue(field).trim();
-    if (!text) {
-      F.toast("Kildefeltet er tomt – ingen tekst å overføre.", "error");
-      return;
-    }
+    console.log("[FLK] Overfør tekst trykket");
+    try {
+      const settings = await F.getSettings();
+      const field = findSourceField(settings.sourceField);
+      if (!field) {
+        F.toast("Fant ikke kildefeltet (" + settings.sourceField + ").", "error");
+        return;
+      }
+      const text = readValue(field).trim();
+      if (!text) {
+        F.toast("Kildefeltet er tomt – ingen tekst å overføre.", "error");
+        return;
+      }
 
-    const parts = F.splitByHeadings(text, settings.headings, settings.includeHeading);
-    const nonEmpty = parts.filter((p) => p && p.trim()).length;
-    if (nonEmpty === 0) {
-      F.toast("Fant ingen av overskriftene i teksten. Sjekk overskriftene i innstillingene.", "error");
-      return;
+      const parts = F.splitByHeadings(text, settings.headings, settings.includeHeading);
+      const nonEmpty = parts.filter((p) => p && p.trim()).length;
+      if (nonEmpty === 0) {
+        F.toast("Fant ingen av overskriftene i teksten. Sjekk overskriftene i innstillingene.", "error");
+        return;
+      }
+
+      await F.set({
+        transfer: { parts, ts: Date.now() },
+        fillTrigger: Date.now() // ber PasientSky-fanen lime inn automatisk
+      });
+
+      F.toast("Tekst delt i " + nonEmpty + " del(er) og sendt. Bytt til PasientSky-fanen.", "ok");
+    } catch (e) {
+      console.error("[FLK] Feil i transfer()", e);
+      try { F.toast("Feil ved overføring: " + (e && e.message ? e.message : e), "error"); } catch (_) {}
     }
-
-    await F.set({
-      transfer: { parts, ts: Date.now() },
-      fillTrigger: Date.now() // ber PasientSky-fanen lime inn automatisk
-    });
-
-    F.toast("Tekst delt i " + nonEmpty + " del(er) og sendt. Bytt til PasientSky-fanen.", "ok");
   }
 
   // Plasser knappen så den hovrer nederst til venstre inni kildefeltet.
