@@ -208,8 +208,13 @@
     const tag = node.tagName;
     if (/^H[1-6]$/.test(tag) || tag === "LABEL" || tag === "LEGEND") return cleanText(node.textContent);
     if (node.getAttribute && (node.getAttribute("role") === "heading")) return cleanText(node.textContent);
+    // div/span med en klasse som inneholder "label" (f.eks. PasientSky .SOAP-field-label)
+    const cls = (node.getAttribute && node.getAttribute("class")) || "";
+    if (/(^|[\s_-])[a-z-]*label([\s_-]|$)/i.test(cls)) return cleanText(node.textContent);
     return "";
   }
+  // CSS-selektor som dekker overskrifts-/etikett-elementer (inkl. klasse *label*).
+  const LABEL_SELECTOR = 'h1,h2,h3,h4,h5,h6,label,legend,[role=heading],[class*="label" i]';
   // Nærmeste synlige overskrift/label "over" feltet – best mulig stabilt anker.
   function nearbyLabel(el) {
     let n = el, depth = 0;
@@ -218,7 +223,7 @@
       while (sib) {
         const direct = labelish(sib);
         if (direct) return direct;
-        const inner = sib.querySelector && sib.querySelector("h1,h2,h3,h4,h5,h6,label,legend,[role=heading]");
+        const inner = sib.querySelector && sib.querySelector(LABEL_SELECTOR);
         if (inner) { const t = cleanText(inner.textContent); if (t) return t; }
         sib = sib.previousElementSibling;
       }
@@ -277,42 +282,53 @@
     return null;
   }
 
-  // Forsøk å gjenfinne et felt fra et lagret oppslag (selektor + kjennetegn).
-  // Rekkefølge: mest spesifikke/stabile signal først.
+  // Finn feltet via etikett-/overskrifts-teksten ved siden av det. Dette er det
+  // mest robuste signalet for editorer uten stabil id/name (f.eks. PasientSky
+  // sine Draft.js-felt med .SOAP-field-label «Anamnese», «Vurdering» osv.).
+  function findByLabelText(text) {
+    if (!text) return null;
+    const labels = Array.from(document.querySelectorAll(LABEL_SELECTOR));
+    const matches = labels.filter((l) => cleanText(l.textContent) === text);
+    for (const lbl of matches) {
+      const el = editableNear(lbl);
+      if (el) return el;
+    }
+    return null;
+  }
+
+  // Forsøk å gjenfinne et felt fra et lagret oppslag.
+  // Rekkefølge: stabile attributter → etikett-tekst (semantisk) → posisjons-
+  // basert selektor (siste utvei) → klasse. Kun ENTYDIGE treff godtas, slik at
+  // et flertydig treff (f.eks. delt contenteditable-klasse) ikke fyller feil felt.
   function findElement(entry) {
     const attrs = entry.attrs || {};
-    const tryList = [];
-
-    if (entry.selector) tryList.push(entry.selector);
+    const attrSelectors = [];
     for (const k of Object.keys(attrs.data || {})) {
-      tryList.push("[" + k + '="' + cssEscAttr(attrs.data[k]) + '"]');
+      attrSelectors.push("[" + k + '="' + cssEscAttr(attrs.data[k]) + '"]');
     }
-    if (attrs.name) tryList.push('[name="' + cssEscAttr(attrs.name) + '"]');
-    if (attrs.id && !looksRandom(attrs.id)) tryList.push("#" + cssEsc(attrs.id));
-    if (attrs.ariaLabel) tryList.push('[aria-label="' + cssEscAttr(attrs.ariaLabel) + '"]');
-    if (attrs.placeholder) tryList.push('[placeholder="' + cssEscAttr(attrs.placeholder) + '"]');
-    if (attrs.classes && attrs.classes.length) {
-      tryList.push(attrs.tag + "." + attrs.classes.map(cssEsc).join("."));
-    }
+    if (attrs.name) attrSelectors.push('[name="' + cssEscAttr(attrs.name) + '"]');
+    if (attrs.id && !looksRandom(attrs.id)) attrSelectors.push("#" + cssEsc(attrs.id));
+    if (attrs.ariaLabel) attrSelectors.push('[aria-label="' + cssEscAttr(attrs.ariaLabel) + '"]');
+    if (attrs.placeholder) attrSelectors.push('[placeholder="' + cssEscAttr(attrs.placeholder) + '"]');
 
-    // Kun ENTYDIGE treff godtas – et flertydig treff (f.eks. en delt
-    // contenteditable-klasse på alle 4 feltene) kan ellers fylle feil felt.
-    for (const sel of tryList) {
+    const uniq = (sel) => {
       try {
-        const found = Array.from(document.querySelectorAll(sel)).filter(isEditable);
-        if (found.length === 1) return found[0];
-      } catch (e) {}
-    }
-    // siste utvei: nærliggende overskrift/label-tekst → nærmeste redigerbare felt
-    const text = attrs.labelText || attrs.nearText;
-    if (text) {
-      const labels = Array.from(document.querySelectorAll("h1,h2,h3,h4,h5,h6,label,legend,[role=heading]"));
-      for (const lbl of labels) {
-        if (cleanText(lbl.textContent) === text) {
-          const el = editableNear(lbl);
-          if (el) return el;
-        }
-      }
+        const f = Array.from(document.querySelectorAll(sel)).filter(isEditable);
+        return f.length === 1 ? f[0] : null;
+      } catch (e) { return null; }
+    };
+
+    // 1) stabile attributter
+    for (const sel of attrSelectors) { const el = uniq(sel); if (el) return el; }
+    // 2) etikett-/overskrifts-tekst ved siden av feltet (mest robust her)
+    const byLabel = findByLabelText(attrs.labelText || attrs.nearText);
+    if (byLabel) return byLabel;
+    // 3) posisjonsbasert selektor (siste utvei)
+    if (entry.selector) { const el = uniq(entry.selector); if (el) return el; }
+    // 4) klassekombinasjon (kun hvis entydig)
+    if (attrs.classes && attrs.classes.length) {
+      const el = uniq(attrs.tag + "." + attrs.classes.map(cssEsc).join("."));
+      if (el) return el;
     }
     return null;
   }
