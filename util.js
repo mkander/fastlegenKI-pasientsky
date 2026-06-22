@@ -392,13 +392,30 @@
     }
   }
 
-  // Fyll et contenteditable-felt linje for linje med ekte avsnittsskift.
-  // Dette etterligner skriving og emitter beforeinput/input-hendelser som rike
-  // editorer (ProseMirror, Slate, Draft, Quill, ren contenteditable) forstår,
-  // slik at alle avsnitt bevares – ikke bare det siste.
+  // Simuler innliming av ren tekst. Rike editorer (Draft.js, ProseMirror,
+  // Slate, Quill) har egne paste-håndterere som splitter på linjeskift og
+  // bevarer avsnitt. Returnerer true hvis en håndterer konsumerte hendelsen.
+  function pasteInto(el, text) {
+    try {
+      const dt = new DataTransfer();
+      dt.setData("text/plain", text);
+      let ev;
+      try {
+        ev = new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: dt });
+      } catch (e) { ev = null; }
+      if (!ev) return false;
+      if (!ev.clipboardData) {
+        try { Object.defineProperty(ev, "clipboardData", { value: dt }); } catch (e) {}
+      }
+      el.dispatchEvent(ev);
+      return ev.defaultPrevented === true;
+    } catch (e) { return false; }
+  }
+
+  // Fyll et contenteditable-felt og bevar alle avsnitt.
   function fillContentEditable(el, value) {
     el.focus();
-    // marker og fjern eksisterende innhold
+    // marker alt eksisterende innhold (så innliming/innsetting erstatter det)
     try {
       const sel = window.getSelection();
       const range = document.createRange();
@@ -407,10 +424,16 @@
       sel.addRange(range);
     } catch (e) {}
 
+    // 1) Simulert innliming – beste metode for Draft.js m.fl.
+    if (pasteInto(el, value)) return;
+
+    // 2) execCommand insertText med full tekst (mange editorer takler \n her)
+    try { if (document.execCommand("insertText", false, value)) return; } catch (e) {}
+
+    // 3) linje for linje med avsnittsskift
     let cleared = false;
     try { cleared = document.execCommand("delete", false, null); } catch (e) {}
     if (!cleared) { try { el.textContent = ""; } catch (e) {} }
-
     const lines = String(value).split("\n");
     let usedExec = true;
     for (let i = 0; i < lines.length; i++) {
@@ -425,21 +448,19 @@
         if (!ok) { usedExec = false; break; }
       }
     }
+    if (usedExec) return;
 
-    // Siste utvei hvis execCommand ikke støttes i denne editoren:
-    // bygg avsnitt som <div>-blokker og dispatch input.
-    if (!usedExec) {
-      el.textContent = "";
-      const frag = document.createDocumentFragment();
-      lines.forEach((line) => {
-        const div = document.createElement("div");
-        div.textContent = line || "";
-        if (!line) div.appendChild(document.createElement("br"));
-        frag.appendChild(div);
-      });
-      el.appendChild(frag);
-      el.dispatchEvent(new Event("input", { bubbles: true }));
-    }
+    // 4) siste utvei: bygg <div>-blokker direkte
+    el.textContent = "";
+    const frag = document.createDocumentFragment();
+    lines.forEach((line) => {
+      const div = document.createElement("div");
+      div.textContent = line || "";
+      if (!line) div.appendChild(document.createElement("br"));
+      frag.appendChild(div);
+    });
+    el.appendChild(frag);
+    el.dispatchEvent(new Event("input", { bubbles: true }));
   }
 
   /* ---------- toast ---------- */
