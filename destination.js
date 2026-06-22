@@ -97,7 +97,7 @@
   }
 
   /* ---------------- reager på storage-endringer ---------------- */
-  chrome.storage.onChanged.addListener((changes, area) => {
+  F.onChanged((changes, area) => {
     if (area !== "local") return;
     if (changes.learnState) learnStateCache = changes.learnState.newValue || { active: false, index: 0 };
     if (changes.fillTrigger) doFill();
@@ -162,12 +162,16 @@
   }
 
   /* ---------------- popup-meldinger ---------------- */
-  chrome.runtime.onMessage.addListener((msg, _s, sendResponse) => {
-    if (!msg) return false;
-    if (msg.action === "startLearn") { toggleLearn(); sendResponse({ ok: true }); }
-    else if (msg.action === "fill") { doFill(); sendResponse({ ok: true }); }
-    return false;
-  });
+  try {
+    if (chrome && chrome.runtime && chrome.runtime.onMessage) {
+      chrome.runtime.onMessage.addListener((msg, _s, sendResponse) => {
+        if (!msg) return false;
+        if (msg.action === "startLearn") { toggleLearn(); sendResponse({ ok: true }); }
+        else if (msg.action === "fill") { doFill(); sendResponse({ ok: true }); }
+        return false;
+      });
+    }
+  } catch (e) {}
 
   if (isTop) {
     if (document.readyState === "loading") {

@@ -11,12 +11,42 @@
     sourceField: "#responseBox"
   };
 
-  /* ---------- storage (promise-wrappere) ---------- */
+  /* ---------- storage (promise-wrappere) ----------
+     Defensive: noen PasientSky-iframes er sandboxed/opaque-origin der
+     content-scriptet kjører, men chrome.storage-API-et ikke finnes. Da
+     resolver vi tomt i stedet for å kaste. */
+  function storageOk() {
+    try { return !!(chrome && chrome.storage && chrome.storage.local); }
+    catch (e) { return false; }
+  }
   function get(keys) {
-    return new Promise((res) => chrome.storage.local.get(keys, res));
+    return new Promise((res) => {
+      if (!storageOk()) return res({});
+      try {
+        chrome.storage.local.get(keys, (r) => {
+          const err = chrome.runtime && chrome.runtime.lastError;
+          res(err ? {} : (r || {}));
+        });
+      } catch (e) { res({}); }
+    });
   }
   function set(obj) {
-    return new Promise((res) => chrome.storage.local.set(obj, res));
+    return new Promise((res) => {
+      if (!storageOk()) return res();
+      try {
+        chrome.storage.local.set(obj, () => {
+          void (chrome.runtime && chrome.runtime.lastError);
+          res();
+        });
+      } catch (e) { res(); }
+    });
+  }
+  function onChanged(cb) {
+    try {
+      if (chrome && chrome.storage && chrome.storage.onChanged) {
+        chrome.storage.onChanged.addListener(cb);
+      }
+    } catch (e) {}
   }
   async function getSettings() {
     const { settings } = await get("settings");
@@ -432,7 +462,7 @@
   }
 
   window.FLK = {
-    DEFAULTS, get, set, getSettings, getFieldMap, getTransfer,
+    DEFAULTS, get, set, onChanged, getSettings, getFieldMap, getTransfer,
     splitByHeadings, normHeading,
     isEditable, editableFrom, cssPath, captureAttrs, findElement,
     setNativeValue, fillField, fillContentEditable, toast, frameKey

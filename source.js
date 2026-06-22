@@ -85,10 +85,14 @@
   }
 
   // svar på popup-meldinger
-  chrome.runtime.onMessage.addListener((msg, _s, sendResponse) => {
-    if (msg && msg.action === "transfer") { transfer(); sendResponse({ ok: true }); }
-    return false;
-  });
+  try {
+    if (chrome && chrome.runtime && chrome.runtime.onMessage) {
+      chrome.runtime.onMessage.addListener((msg, _s, sendResponse) => {
+        if (msg && msg.action === "transfer") { transfer(); sendResponse({ ok: true }); }
+        return false;
+      });
+    }
+  } catch (e) {}
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", mount);
