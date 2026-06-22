@@ -76,14 +76,15 @@
     const myKey = F.frameKey();
     let filled = 0;
     let missing = 0;
+    const used = new Set();
 
     map.forEach((entry, i) => {
       if (!entry || entry.key !== myKey) return; // tilhører en annen frame
       const part = transfer.parts[i];
       if (!part || !part.trim()) return; // ikke overskriv med tom tekst
       const el = F.findElement(entry);
-      if (el) { F.fillField(el, part); filled++; }
-      else missing++;
+      if (el && !used.has(el)) { used.add(el); F.fillField(el, part); filled++; }
+      else missing++; // ikke funnet, eller allerede brukt (unngå dobbel-fylling)
     });
 
     if (isTop && filled === 0 && missing === 0) {

@@ -118,28 +118,114 @@
     return false;
   }
 
+  // Er et klassenavn sannsynligvis stabilt (designsystem/semantisk), ikke en
+  // autogenerert hash (css-modules, emotion/styled, utility med tall)?
+  function isStableClass(c) {
+    if (!c || c.length > 40) return false;
+    if (!/^[a-zA-Z][\w-]*$/.test(c)) return false;
+    if (/^css-[a-z0-9]{4,}$/i.test(c)) return false;       // emotion/styled
+    if (/^[a-z]+-[a-z0-9]{5,}$/i.test(c) && /\d/.test(c)) return false; // hash-aktig
+    if (/[a-z]{2,}[0-9]{2,}[a-z]/i.test(c)) return false;  // blandet hash
+    if (/^(ng|jss|sc)-?\d/i.test(c)) return false;
+    return true;
+  }
+  function stableClasses(el) {
+    return Array.from(el.classList || []).filter(isStableClass);
+  }
+  function dataAttrs(el) {
+    const out = {};
+    for (const attr of el.attributes) {
+      if (/^data-(testid|test|cy|qa|field|name|key|id|type|role|automation)$/i.test(attr.name)) {
+        out[attr.name] = attr.value;
+      }
+    }
+    return out;
+  }
+  function uniqueMatch(sel, target) {
+    try {
+      const list = document.querySelectorAll(sel);
+      return list.length === 1 && (!target || list[0] === target);
+    } catch (e) { return false; }
+  }
+
+  // Bygg ett selektor-segment for et element: tag + stabile klasser/data-attr,
+  // med :nth-of-type kun når det trengs for å skille fra søsken.
+  function segFor(el) {
+    const tag = el.tagName.toLowerCase();
+    let seg = tag;
+    const classes = stableClasses(el);
+    if (classes.length) seg += "." + classes.map(cssEsc).join(".");
+    const data = dataAttrs(el);
+    for (const k of Object.keys(data)) seg += "[" + k + '="' + cssEscAttr(data[k]) + '"]';
+
+    const parent = el.parentElement;
+    if (parent) {
+      // teller søsken som matcher dette segmentet (uten nth) for å avgjøre behov
+      let matches;
+      try { matches = Array.from(parent.children).filter((c) => c.matches(seg)); }
+      catch (e) { matches = Array.from(parent.children).filter((c) => c.tagName === el.tagName); }
+      if (matches.length > 1) {
+        const sameTag = Array.from(parent.children).filter((c) => c.tagName === el.tagName);
+        seg += ":nth-of-type(" + (sameTag.indexOf(el) + 1) + ")";
+      }
+    }
+    return seg;
+  }
+
+  // Robust selektor: korteste unike suffiks, forankret på nærmeste stabile
+  // forelder (id / stabil klasse / data-attr). Faller tilbake til full sti.
   function cssPath(el) {
     if (el.id && !looksRandom(el.id)) {
       const sel = "#" + cssEsc(el.id);
-      try { if (document.querySelectorAll(sel).length === 1) return sel; } catch (e) {}
+      if (uniqueMatch(sel, el)) return sel;
     }
-    const parts = [];
+    const segs = [];
     let n = el;
     while (n && n.nodeType === 1 && n !== document.documentElement) {
       if (n.id && !looksRandom(n.id)) {
-        parts.unshift("#" + cssEsc(n.id));
-        break;
+        segs.unshift("#" + cssEsc(n.id));
+        const cand = segs.join(" > ");
+        if (uniqueMatch(cand, el)) return cand;
+        // id var ikke nok alene – fortsett oppover for kontekst
+      } else {
+        segs.unshift(segFor(n));
+        const cand = segs.join(" > ");
+        // Stopp så snart suffikset entydig peker på målet (forankring).
+        if (uniqueMatch(cand, el)) return cand;
       }
-      let part = n.tagName.toLowerCase();
-      const parent = n.parentElement;
-      if (parent) {
-        const sibs = Array.from(parent.children).filter((c) => c.tagName === n.tagName);
-        if (sibs.length > 1) part += ":nth-of-type(" + (sibs.indexOf(n) + 1) + ")";
-      }
-      parts.unshift(part);
-      n = parent;
+      n = n.parentElement;
     }
-    return parts.join(" > ");
+    return segs.join(" > ");
+  }
+
+  // Rens og valider en kort tekst (label/overskrift).
+  function cleanText(s) {
+    s = (s || "").replace(/\s+/g, " ").trim();
+    return s.length > 0 && s.length <= 80 ? s : "";
+  }
+  function labelish(node) {
+    if (!node || node.nodeType !== 1) return "";
+    const tag = node.tagName;
+    if (/^H[1-6]$/.test(tag) || tag === "LABEL" || tag === "LEGEND") return cleanText(node.textContent);
+    if (node.getAttribute && (node.getAttribute("role") === "heading")) return cleanText(node.textContent);
+    return "";
+  }
+  // Nærmeste synlige overskrift/label "over" feltet – best mulig stabilt anker.
+  function nearbyLabel(el) {
+    let n = el, depth = 0;
+    while (n && depth < 12) {
+      let sib = n.previousElementSibling;
+      while (sib) {
+        const direct = labelish(sib);
+        if (direct) return direct;
+        const inner = sib.querySelector && sib.querySelector("h1,h2,h3,h4,h5,h6,label,legend,[role=heading]");
+        if (inner) { const t = cleanText(inner.textContent); if (t) return t; }
+        sib = sib.previousElementSibling;
+      }
+      n = n.parentElement;
+      depth++;
+    }
+    return "";
   }
 
   // Tilleggs-kjennetegn vi kan bruke for å gjenfinne feltet hvis selektoren svikter.
@@ -163,16 +249,36 @@
       if (lbl) a.labelText = (lbl.textContent || "").trim();
     }
     // data-* som ofte er stabile i test-/komponentrammeverk
-    a.data = {};
-    for (const attr of el.attributes) {
-      if (/^data-(testid|test|cy|qa|field|name|key)$/i.test(attr.name)) {
-        a.data[attr.name] = attr.value;
-      }
-    }
+    a.data = dataAttrs(el);
+    // stabile klasser på selve feltet
+    a.classes = stableClasses(el);
+    // nærmeste synlige overskrift/label – ofte det mest stabile holdepunktet
+    if (!a.labelText) a.labelText = nearbyLabel(el);
+    a.nearText = nearbyLabel(el);
     return a;
   }
 
+  // Finn nærmeste redigerbare element i tilknytning til et label/overskrift-element.
+  function editableNear(labelEl) {
+    // 1) eksplisitt for-kobling
+    const forId = labelEl.getAttribute && labelEl.getAttribute("for");
+    if (forId) {
+      const t = document.getElementById(forId);
+      if (t && isEditable(t)) return t;
+    }
+    // 2) redigerbart inni samme blokk, ellers klatre oppover og søk etterfølgende
+    let scope = labelEl, depth = 0;
+    while (scope && depth < 6) {
+      const cand = scope.querySelector && scope.querySelector('input,textarea,[contenteditable=""],[contenteditable="true"]');
+      if (cand && isEditable(cand)) return cand;
+      scope = scope.parentElement;
+      depth++;
+    }
+    return null;
+  }
+
   // Forsøk å gjenfinne et felt fra et lagret oppslag (selektor + kjennetegn).
+  // Rekkefølge: mest spesifikke/stabile signal først.
   function findElement(entry) {
     const attrs = entry.attrs || {};
     const tryList = [];
@@ -185,21 +291,26 @@
     if (attrs.id && !looksRandom(attrs.id)) tryList.push("#" + cssEsc(attrs.id));
     if (attrs.ariaLabel) tryList.push('[aria-label="' + cssEscAttr(attrs.ariaLabel) + '"]');
     if (attrs.placeholder) tryList.push('[placeholder="' + cssEscAttr(attrs.placeholder) + '"]');
+    if (attrs.classes && attrs.classes.length) {
+      tryList.push(attrs.tag + "." + attrs.classes.map(cssEsc).join("."));
+    }
 
+    // Kun ENTYDIGE treff godtas – et flertydig treff (f.eks. en delt
+    // contenteditable-klasse på alle 4 feltene) kan ellers fylle feil felt.
     for (const sel of tryList) {
       try {
         const found = Array.from(document.querySelectorAll(sel)).filter(isEditable);
-        if (found.length) return found[0];
+        if (found.length === 1) return found[0];
       } catch (e) {}
     }
-    // siste utvei: koblet <label>-tekst
-    if (attrs.labelText) {
-      const labels = Array.from(document.querySelectorAll("label"));
+    // siste utvei: nærliggende overskrift/label-tekst → nærmeste redigerbare felt
+    const text = attrs.labelText || attrs.nearText;
+    if (text) {
+      const labels = Array.from(document.querySelectorAll("h1,h2,h3,h4,h5,h6,label,legend,[role=heading]"));
       for (const lbl of labels) {
-        if ((lbl.textContent || "").trim() === attrs.labelText) {
-          const id = lbl.getAttribute("for");
-          let el = id ? document.getElementById(id) : lbl.querySelector("input,textarea,[contenteditable]");
-          if (el && isEditable(el)) return el;
+        if (cleanText(lbl.textContent) === text) {
+          const el = editableNear(lbl);
+          if (el) return el;
         }
       }
     }
