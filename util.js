@@ -225,20 +225,64 @@
       setNativeValue(el, value);
       el.dispatchEvent(new Event("input", { bubbles: true }));
       el.dispatchEvent(new Event("change", { bubbles: true }));
-    } else if (el.isContentEditable) {
+      el.dispatchEvent(new Event("blur", { bubbles: true }));
+      return;
+    }
+    if (el.isContentEditable) {
+      fillContentEditable(el, value);
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+      el.dispatchEvent(new Event("blur", { bubbles: true }));
+    }
+  }
+
+  // Fyll et contenteditable-felt linje for linje med ekte avsnittsskift.
+  // Dette etterligner skriving og emitter beforeinput/input-hendelser som rike
+  // editorer (ProseMirror, Slate, Draft, Quill, ren contenteditable) forstår,
+  // slik at alle avsnitt bevares – ikke bare det siste.
+  function fillContentEditable(el, value) {
+    el.focus();
+    // marker og fjern eksisterende innhold
+    try {
       const sel = window.getSelection();
       const range = document.createRange();
       range.selectNodeContents(el);
       sel.removeAllRanges();
       sel.addRange(range);
-      let ok = false;
-      try { ok = document.execCommand("insertText", false, value); } catch (e) {}
-      if (!ok) {
-        el.textContent = value;
-        el.dispatchEvent(new Event("input", { bubbles: true }));
+    } catch (e) {}
+
+    let cleared = false;
+    try { cleared = document.execCommand("delete", false, null); } catch (e) {}
+    if (!cleared) { try { el.textContent = ""; } catch (e) {} }
+
+    const lines = String(value).split("\n");
+    let usedExec = true;
+    for (let i = 0; i < lines.length; i++) {
+      if (i > 0) {
+        let ok = false;
+        try { ok = document.execCommand("insertParagraph", false, null); } catch (e) {}
+        if (!ok) { usedExec = false; break; }
+      }
+      if (lines[i]) {
+        let ok = false;
+        try { ok = document.execCommand("insertText", false, lines[i]); } catch (e) {}
+        if (!ok) { usedExec = false; break; }
       }
     }
-    el.dispatchEvent(new Event("blur", { bubbles: true }));
+
+    // Siste utvei hvis execCommand ikke støttes i denne editoren:
+    // bygg avsnitt som <div>-blokker og dispatch input.
+    if (!usedExec) {
+      el.textContent = "";
+      const frag = document.createDocumentFragment();
+      lines.forEach((line) => {
+        const div = document.createElement("div");
+        div.textContent = line || "";
+        if (!line) div.appendChild(document.createElement("br"));
+        frag.appendChild(div);
+      });
+      el.appendChild(frag);
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+    }
   }
 
   /* ---------- toast ---------- */
@@ -264,6 +308,6 @@
     DEFAULTS, get, set, getSettings, getFieldMap, getTransfer,
     splitByHeadings, normHeading,
     isEditable, editableFrom, cssPath, captureAttrs, findElement,
-    setNativeValue, fillField, toast, frameKey
+    setNativeValue, fillField, fillContentEditable, toast, frameKey
   };
 })();
