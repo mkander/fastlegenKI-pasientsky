@@ -4,6 +4,9 @@ Chrome-utvidelse som overfører notattekst fra **FastlegeKI** til journalfeltene
 **PasientSky**. Teksten deles automatisk i 4 deler ut fra overskrifter du selv
 konfigurerer, og hver del legges i sitt felt i PasientSky.
 
+I tillegg kan utvidelsen **generere KI-forslag til svar på e-konsultasjoner**
+direkte i PasientSky-dialogen, med Claude API (se egen seksjon under).
+
 ## Hvordan det virker
 
 1. **Kilde (FastlegeKI):** En flytende knapp **«Overfør tekst»** som hovrer
@@ -41,6 +44,38 @@ så felter inne i iframes treffes også.
 1. I FastlegeKI: trykk **«Overfør tekst»** (knappen inni notatfeltet).
 2. Bytt til PasientSky-fanen – feltene fylles automatisk.
 
+## KI-generert svar på e-konsultasjon (Claude)
+
+Når en dialog med en pasient er åpen i PasientSky, kan utvidelsen hente
+pasientens melding, generere et forslag til svar i Magnus sin egen stil, skrive
+det rett inn i svarfeltet, og legge et helt kort journalnotat på
+utklippstavlen (klart til å limes inn i journalen).
+
+### Oppsett (én gang)
+
+1. **API-nøkkel:** Åpne Innstillinger og lim inn en Anthropic API-nøkkel
+   (opprettes på `console.anthropic.com`). Velg modell — standard er
+   Claude Opus 4.8. Nøkkelen lagres kun lokalt i nettleseren.
+2. **Koble dialogen:** Åpne en e-konsultasjon i PasientSky, trykk på
+   utvidelsesikonet og velg **«Koble dialog for KI-svar»**. Klikk først på
+   pasientens melding, deretter i svarfeltet. Koblingen lagres (robust
+   selektor + frame, som for journalfeltene) og gjenbrukes i alle dialoger.
+
+### Daglig bruk
+
+1. Åpne dialogen. En liten linje med stikkordfelt og **«✨ Generer svar»**
+   vises over svarfeltet.
+2. Skriv eventuelt stikkord/føring (f.eks. `resept sendt, kort` eller
+   `sykmeld 1 uke, kjent ryggplage`) — feltet kan stå tomt.
+3. Trykk **Generer svar** (eller Enter i stikkordfeltet). Svaret skrives inn i
+   svarfeltet og journalnotatet legges på utklippstavlen. Hvis automatisk
+   kopiering ikke er mulig, vises en egen **«Kopier notat»**-knapp.
+4. Les gjennom, juster ved behov, og send. Forslaget er nettopp det — et
+   forslag; det medisinske ansvaret ligger hos legen.
+
+Selve prompten (rolle, skrivestil, norsk medisinsk kontekst, røde flagg osv.)
+ligger innebygd i `background.js`.
+
 ## Innstillinger
 
 - **Overskrifter (Felt 1–4):** Teksten deles på disse. Kolon, markdown (`**`, `#`)
@@ -58,6 +93,8 @@ så felter inne i iframes treffes også.
 | `util.js` | Felles hjelpere (deling, selektorer, fylling, toast) |
 | `source.js` | FastlegeKI: «Overfør tekst»-knapp |
 | `destination.js` | PasientSky: lær-felt-modus + innliming (alle frames) |
+| `dialog.js` | PasientSky: «Generer svar»-knapp i dialog + dialogkobling |
+| `background.js` | Service worker: Claude API-kall + innebygd prompt |
 | `options.html` / `options.js` | Innstillinger |
 | `popup.html` / `popup.js` | Hurtigknapper fra verktøylinjen |
 | `ui.css` | Stiler for knapp, panel og toast |

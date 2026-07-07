@@ -8,7 +8,7 @@
     h1 { font-size: 20px; color: #0052e6; }
     h2 { font-size: 15px; margin-top: 28px; }
     label { display: block; font-weight: 600; margin: 14px 0 4px; }
-    input[type="text"] { width: 100%; padding: 9px 10px; border: 1px solid #cfd6e4; border-radius: 8px; box-sizing: border-box; font: inherit; }
+    input[type="text"], input[type="password"], select { width: 100%; padding: 9px 10px; border: 1px solid #cfd6e4; border-radius: 8px; box-sizing: border-box; font: inherit; background: #fff; }
     .row { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
     .row input[type="checkbox"] { width: 16px; height: 16px; }
     .hint { color: #5a6472; font-size: 12px; margin-top: 4px; }
@@ -42,6 +42,20 @@
   <label for="sourceField">CSS-selektor for feltet det kopieres fra</label>
   <input type="text" id="sourceField" />
   <p class="hint">Standard: <code>#responseBox</code> (notatfeltet). Endre kun om du vil kopiere fra et annet felt.</p>
+
+  <h2>KI-generert svar (Claude)</h2>
+  <p class="hint">Brukes av «Generer svar»-knappen i PasientSky-dialoger. Nøkkelen lagres kun lokalt i nettleseren. Opprett nøkkel på <code>console.anthropic.com</code>.</p>
+  <label for="apiKey">Anthropic API-nøkkel</label>
+  <input type="password" id="apiKey" placeholder="sk-ant-..." autocomplete="off" />
+  <label for="aiModel">Modell</label>
+  <select id="aiModel">
+    <option value="claude-opus-4-8">Claude Opus 4.8 (anbefalt)</option>
+    <option value="claude-sonnet-5">Claude Sonnet 5 (raskere og billigere)</option>
+    <option value="claude-haiku-4-5">Claude Haiku 4.5 (raskest, enklest)</option>
+  </select>
+  <p class="hint">Dialogen kobles i PasientSky via «Koble dialog for KI-svar» i utvidelsens popup: klikk på pasientens melding, deretter på svarfeltet. Status:</p>
+  <div id="dialogStatus" class="map">Laster…</div>
+  <button id="resetDialog" class="secondary" type="button">Nullstill dialogkobling</button>
 
   <h2>Kobling av PasientSky-felt</h2>
   <p class="hint">Feltene kobles ved å klikke på dem i PasientSky (knappen «Koble felt» nede til venstre). Status:</p>

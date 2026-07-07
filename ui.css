@@ -70,6 +70,45 @@
 .flk-btn.flk-primary.flk-ready { box-shadow: 0 0 0 3px rgba(0, 82, 230, 0.25); }
 .flk-btn.flk-active { background: #ffb020; color: #1a1a1a; border-color: #e09a00; }
 
+/* KI-linje ved svarfeltet i dialog (posisjon settes av JS via left/top) */
+.flk-ai-bar {
+  position: fixed;
+  z-index: 2147483646;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 6px;
+  border-radius: 10px;
+  background: #ffffff;
+  border: 1px solid #e2e6ee;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.18);
+}
+.flk-ai-input {
+  width: 230px;
+  padding: 7px 9px;
+  border: 1px solid #cfd6e4;
+  border-radius: 7px;
+  font: 400 12.5px/1.2 Roboto, "Segoe UI", system-ui, sans-serif;
+  color: #1a1a1a;
+  background: #f9fafc;
+  box-sizing: border-box;
+}
+.flk-ai-input:focus { outline: none; border-color: #0052e6; background: #fff; }
+.flk-ai-btn {
+  padding: 7px 12px;
+  border: 1px solid #cfd6e4;
+  border-radius: 7px;
+  background: #f4f6fb;
+  color: #1a1a1a;
+  font: 600 12.5px/1.2 Roboto, "Segoe UI", system-ui, sans-serif;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.flk-ai-btn:hover { background: #e9edf6; }
+.flk-ai-btn:disabled { opacity: 0.65; cursor: wait; }
+.flk-ai-btn.flk-ai-primary { background: #0052e6; color: #fff; border-color: #0052e6; }
+.flk-ai-btn.flk-ai-primary:hover:not(:disabled) { background: #0046c7; }
+
 .flk-toast {
   position: fixed;
   left: 20px;

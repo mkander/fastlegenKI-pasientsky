@@ -6,13 +6,14 @@
     includeHeading: false,
     sourceField: "#responseBox"
   };
+  const DEFAULT_MODEL = "claude-opus-4-8";
   const $ = (id) => document.getElementById(id);
 
   function get(keys) { return new Promise((r) => chrome.storage.local.get(keys, r)); }
   function set(obj) { return new Promise((r) => chrome.storage.local.set(obj, r)); }
 
   async function load() {
-    const { settings } = await get("settings");
+    const { settings, ai } = await get(["settings", "ai"]);
     const s = Object.assign({}, DEFAULTS, settings || {});
     $("h1").value = s.headings[0] || "";
     $("h2").value = s.headings[1] || "";
@@ -20,7 +21,11 @@
     $("h4").value = s.headings[3] || "";
     $("includeHeading").checked = !!s.includeHeading;
     $("sourceField").value = s.sourceField || "#responseBox";
+    const a = ai || {};
+    $("apiKey").value = a.apiKey || "";
+    $("aiModel").value = a.model || DEFAULT_MODEL;
     renderMap();
+    renderDialog();
   }
 
   async function renderMap() {
@@ -43,13 +48,28 @@
     $("mapStatus").textContent = lines.join("\n");
   }
 
+  async function renderDialog() {
+    const { dialogMap } = await get("dialogMap");
+    const m = dialogMap || {};
+    const line = (label, e) => {
+      if (!e || !e.selector) return label + ": (ikke koblet)";
+      const hint = e.attrs && (e.attrs.ariaLabel || e.attrs.placeholder || e.attrs.labelText || e.attrs.name);
+      return label + ": " + (hint ? hint + "  " : "") + "[" + e.selector + "]";
+    };
+    $("dialogStatus").textContent = line("Pasientmelding", m.message) + "\n" + line("Svarfelt", m.reply);
+  }
+
   async function save() {
     const settings = {
       headings: [$("h1").value, $("h2").value, $("h3").value, $("h4").value].map((x) => x.trim()),
       includeHeading: $("includeHeading").checked,
       sourceField: $("sourceField").value.trim() || "#responseBox"
     };
-    await set({ settings });
+    const ai = {
+      apiKey: $("apiKey").value.trim(),
+      model: $("aiModel").value || DEFAULT_MODEL
+    };
+    await set({ settings, ai });
     const st = $("status");
     st.textContent = "Lagret ✔";
     setTimeout(() => (st.textContent = ""), 2000);
@@ -66,9 +86,15 @@
     await set({ fieldMap: [], learnState: { active: false, index: 0 } });
     renderMap();
   });
+  $("resetDialog").addEventListener("click", async () => {
+    await set({ dialogMap: {}, dialogLearn: { active: false, step: 0 } });
+    renderDialog();
+  });
 
   chrome.storage.onChanged.addListener((c, area) => {
-    if (area === "local" && c.fieldMap) renderMap();
+    if (area !== "local") return;
+    if (c.fieldMap) renderMap();
+    if (c.dialogMap) renderDialog();
   });
 
   load();
