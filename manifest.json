@@ -1,13 +1,17 @@
 {
   "manifest_version": 3,
-  "name": "FastlegeKI → PasientSky overføring",
-  "version": "1.0.0",
-  "description": "Overfører notattekst fra FastlegeKI til journalfelter i PasientSky, delt opp på konfigurerbare overskrifter.",
-  "permissions": ["storage", "activeTab"],
+  "name": "FastlegeKI → PasientSky",
+  "version": "1.1.0",
+  "description": "Overfører notattekst fra FastlegeKI til journalfelter i PasientSky, og genererer KI-forslag til svar på e-konsultasjoner med Claude.",
+  "permissions": ["storage", "activeTab", "clipboardWrite"],
   "host_permissions": [
     "*://*.fastlegen.com/*",
-    "*://*.pasientsky.no/*"
+    "*://*.pasientsky.no/*",
+    "https://api.anthropic.com/*"
   ],
+  "background": {
+    "service_worker": "background.js"
+  },
   "options_page": "options.html",
   "action": {
     "default_popup": "popup.html",
@@ -22,7 +26,7 @@
     },
     {
       "matches": ["*://*.pasientsky.no/*"],
-      "js": ["util.js", "destination.js"],
+      "js": ["util.js", "destination.js", "dialog.js"],
       "css": ["ui.css"],
       "all_frames": true,
       "run_at": "document_idle"

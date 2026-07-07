@@ -24,5 +24,6 @@
   $("transfer").addEventListener("click", () => send("transfer"));
   $("learn").addEventListener("click", () => send("startLearn"));
   $("paste").addEventListener("click", () => send("fill"));
+  $("learnDialog").addEventListener("click", () => send("startDialogLearn"));
   $("opts").addEventListener("click", (e) => { e.preventDefault(); chrome.runtime.openOptionsPage(); });
 })();
