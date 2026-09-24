@@ -7,7 +7,7 @@
 "use strict";
 
 const API_URL = "https://api.anthropic.com/v1/messages";
-const DEFAULT_MODEL = "claude-opus-4-8";
+const DEFAULT_MODEL = "claude-opus-5-5";
 
 /* Strukturert utdata: modellen tvinges til gyldig JSON med disse feltene. */
 const SVAR_PROPS = {
@@ -304,7 +304,9 @@ async function generate({ mode, stikkord, melding, materiale }) {
     output_config: { format: { type: "json_schema", schema: outgoing ? OUTGOING_SCHEMA : REPLY_SCHEMA } },
     messages: [{ role: "user", content: userMessage }]
   };
-  // Adaptiv tenking støttes på Opus 4.6+/Sonnet 4.6+/Fable, men ikke Haiku 4.5.
+  // Adaptiv tenking: eksplisitt for Opus 4.6–4.8/Sonnet 4.6+/Fable. Opus 5.x
+  // har tenking alltid på (adaptiv når parameteren utelates), og Haiku 4.5
+  // støtter ikke adaptiv — for begge utelates thinking-parameteren.
   if (/opus-4-[678]|sonnet-(5|4-6)|fable/.test(model)) {
     body.thinking = { type: "adaptive" };
   }
@@ -439,6 +441,17 @@ async function migrateAndSeed() {
     const hasQb = Object.keys(sync).some((k) => k.indexOf("qb.") === 0);
     if (!hasQb) await sSet(DEFAULT_QUICK_BUTTONS);
     await sSet({ __qbSeeded: true });
+  }
+
+  // Engangsoppgradering av modellvalg: Opus 4.8 → Opus 5.5 (bedre, raskere,
+  // billigere). Kjøres ikke på nytt, så et senere bevisst valg av 4.8 står.
+  if (!sync.__opus55Migrated) {
+    const ai = sync.ai || {};
+    if (!ai.model || ai.model === "claude-opus-4-8") {
+      ai.model = DEFAULT_MODEL;
+      await sSet({ ai });
+    }
+    await sSet({ __opus55Migrated: true });
   }
 }
 
