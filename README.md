@@ -61,7 +61,8 @@ utklippstavlen (klart til å limes inn i journalen).
 
 1. **API-nøkkel:** Åpne Innstillinger og lim inn en Anthropic API-nøkkel
    (opprettes på `console.anthropic.com`). Velg modell — standard er
-   Claude Opus 4.8. Nøkkelen lagres kun lokalt i nettleseren.
+   Claude Opus 5.5. Nøkkelen synkroniseres med Chrome-profilen din
+   (se seksjonen om synkronisering).
 2. **Koble dialogen:** Åpne en e-konsultasjon i PasientSky, trykk på
    utvidelsesikonet og velg **«Koble dialog for KI-svar»**. Klikk først på
    pasientens melding, deretter i svarfeltet. Koblingen lagres (robust

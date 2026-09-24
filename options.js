@@ -8,7 +8,7 @@
     includeHeading: false,
     sourceField: "#responseBox"
   };
-  const DEFAULT_MODEL = "claude-opus-4-8";
+  const DEFAULT_MODEL = "claude-opus-5-5";
   const $ = (id) => document.getElementById(id);
 
   function sGet(keys) { return new Promise((r) => chrome.storage.sync.get(keys, (v) => { void chrome.runtime.lastError; r(v || {}); })); }
