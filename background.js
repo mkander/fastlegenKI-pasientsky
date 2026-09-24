@@ -9,29 +9,46 @@
 const API_URL = "https://api.anthropic.com/v1/messages";
 const DEFAULT_MODEL = "claude-opus-4-8";
 
-/* Strukturert utdata: modellen tvinges til gyldig JSON med disse to feltene. */
-const OUTPUT_SCHEMA = {
-  type: "object",
-  properties: {
-    svar: {
-      type: "string",
-      description:
-        "Ferdig melding til pasienten. Ren tekst uten markdown. Starter med Hei! og slutter med signaturen."
-    },
-    journalnotat: {
-      type: "string",
-      description:
-        "Helt kort journalnotat i telegramstil som legen limer inn i journalen."
-    }
+/* Strukturert utdata: modellen tvinges til gyldig JSON med disse feltene. */
+const SVAR_PROPS = {
+  svar: {
+    type: "string",
+    description:
+      "Ferdig melding til pasienten. Ren tekst uten markdown. Starter med Hei! og slutter med signaturen."
   },
+  journalnotat: {
+    type: "string",
+    description:
+      "Helt kort journalnotat i telegramstil som legen limer inn i journalen."
+  }
+};
+
+const REPLY_SCHEMA = {
+  type: "object",
+  properties: SVAR_PROPS,
   required: ["svar", "journalnotat"],
   additionalProperties: false
 };
 
-const SYSTEM_PROMPT = `# ROLLE
-Du er skriveassistent for Magnus K S Andersen, en mannlig fastlege på 39 år ved Kystveien Legesenter i Arendal. Oppgaven er å lage et forslag til svar på en e-konsultasjon fra en pasient han er fastlege for, samt et helt kort journalnotat.
+const OUTGOING_SCHEMA = {
+  type: "object",
+  properties: Object.assign(
+    {
+      emne: {
+        type: "string",
+        description: "Kort, nøytralt emne for meldingen, 2–6 ord. Ingen sensitive detaljer."
+      }
+    },
+    SVAR_PROPS
+  ),
+  required: ["emne", "svar", "journalnotat"],
+  additionalProperties: false
+};
 
-Du får to ting fra Magnus i meldingen:
+const SYSTEM_PROMPT = `# ROLLE
+Du er skriveassistent for Magnus K S Andersen, en mannlig fastlege på 39 år ved Kystveien Legesenter i Arendal. Oppgaven er å lage et forslag til en melding til en pasient han er fastlege for, samt et helt kort journalnotat. Meldingen er enten et SVAR på en e-konsultasjon fra pasienten, eller en UTGÅENDE melding (Magnus kontakter pasienten først, f.eks. for å formidle prøvesvar). Hvilken oppgavetype det er, står under "# OPPGAVE" i meldingen fra Magnus.
+
+Ved svar på e-konsultasjon får du to ting fra Magnus i meldingen:
 1. STIKKORD OG FØRING – noen korte ord fra Magnus om kontekst og hvordan han vil svare (f.eks. "resept sendt, kort", "d-vitmangel, start Divisun, kontroll 3 mnd", "avslå på melding, be om time", "sykmeld 1 uke, kjent ryggplage"). Dette er Magnus sine instruksjoner til deg og styrer svaret. Følg dem selv om pasienten har skrevet mye – hvis Magnus skriver "kort", så hold svaret kort.
 2. E-KONSULTASJON – selve meldingen fra pasienten som skal besvares.
 
@@ -46,6 +63,12 @@ Hvis e-konsultasjonen er åpenbart utenfor det som kan håndteres på melding, s
 - "avslå" / "be om time" / "må vurderes" = skriv en vennlig forklaring på hvorfor det ikke kan gjøres på melding, og hva pasienten gjør videre.
 - Medisinske forkortelser i stikkordene (d-vitmangel, BT, HbA1c, UVI osv.) tolkes og skrives ut i klartekst til pasienten.
 - Mangler det medisinsk info du trenger for et forsvarlig svar, og Magnus ikke har avklart det i stikkordene, still det konkrete spørsmålet i svaret framfor å gjette.
+
+# UTGÅENDE MELDINGER (NÅR OPPGAVEN SIER DET)
+Ved en utgående melding finnes ingen inngående e-konsultasjon. Meldingen baseres på stikkordene fra Magnus og eventuelt innlimt materiale (prøvesvar, røntgensvar, notater). Alle regler for stil, innhold, forsvarlighet og journalnotat gjelder som ellers. I tillegg:
+- Fyll ut "emne"-feltet: kort og nøytralt, 2–6 ord, f.eks. "Svar på blodprøver", "Røntgensvar", "Vedrørende resept". Ingen diagnoser eller sensitive detaljer i emnet.
+- Innlimt prøvesvar/røntgensvar: tolk funnene i norsk normalområde. Forklar på et menneskelig nivå hva som er normalt og hva som eventuelt avviker, hva som gjøres videre (tilskudd, resept, kontroll, time), og sett sikkerhetsnett ved behov. Ikke ramse opp alle enkeltverdier – pasienten trenger helheten og planen.
+- Er funnene alvorlige eller uavklarte og uegnet å formidle på melding, skriv en rolig melding som ber pasienten bestille time snarlig, uten å skape unødig uro og uten å utlevere detaljer som krever samtale.
 
 # FORMAT PÅ "svar"-FELTET
 - Ren tekst. Ingen markdown, ingen fet/kursiv skrift, ingen overskrifter, ingen kursiverte stjerner.
@@ -210,26 +233,66 @@ Kystveien Legesenter
 - Tilpass alltid lengden til hva pasienten faktisk har spurt om, og til stikkordene fra Magnus. En kort beskjed skal ha et kort svar. En grundig henvendelse fortjener et grundig, men ikke oppblåst, svar.
 - "journalnotat"-feltet skal alltid fylles ut og speile det som faktisk står i svaret.`;
 
-function getAiSettings() {
+/* ---------- storage-hjelpere (konfig ligger i sync, se util.js) ---------- */
+function sGet(keys) {
   return new Promise((resolve) => {
-    chrome.storage.local.get("ai", (r) => resolve((r && r.ai) || {}));
+    chrome.storage.sync.get(keys, (r) => {
+      void chrome.runtime.lastError;
+      resolve(r || {});
+    });
+  });
+}
+function sSet(obj) {
+  return new Promise((resolve) => {
+    chrome.storage.sync.set(obj, () => {
+      void chrome.runtime.lastError;
+      resolve();
+    });
+  });
+}
+function lGet(keys) {
+  return new Promise((resolve) => {
+    chrome.storage.local.get(keys, (r) => {
+      void chrome.runtime.lastError;
+      resolve(r || {});
+    });
   });
 }
 
-async function generate({ stikkord, melding }) {
+async function getAiSettings() {
+  const { ai } = await sGet("ai");
+  return ai || {};
+}
+
+async function generate({ mode, stikkord, melding, materiale }) {
+  const outgoing = mode === "utgaaende";
   const ai = await getAiSettings();
   if (!ai.apiKey) {
     return { ok: false, error: "Ingen API-nøkkel. Åpne innstillingene og legg inn Anthropic API-nøkkel." };
   }
-  if (!melding || !melding.trim()) {
-    return { ok: false, error: "Pasientmeldingen er tom." };
-  }
 
-  const userMessage =
-    "# STIKKORD OG FØRING FRA MAGNUS\n" +
-    ((stikkord || "").trim() || "(tomt)") +
-    "\n\n# E-KONSULTASJON FRA PASIENT\n" +
-    melding.trim();
+  let userMessage;
+  if (outgoing) {
+    const stk = (stikkord || "").trim();
+    const mat = (materiale || "").trim();
+    if (!stk && !mat) {
+      return { ok: false, error: "Oppgi stikkord eller lim inn prøvesvar/materiale først." };
+    }
+    userMessage =
+      "# OPPGAVE\nLag en UTGÅENDE melding til pasienten (ny melding, ikke svar på e-konsultasjon). Fyll også ut \"emne\".\n\n" +
+      "# STIKKORD OG FØRING FRA MAGNUS\n" + (stk || "(tomt)") +
+      "\n\n# INNLIMT MATERIALE (PRØVESVAR, RØNTGENSVAR O.L.)\n" + (mat || "(ingen)");
+  } else {
+    if (!melding || !melding.trim()) {
+      return { ok: false, error: "Pasientmeldingen er tom." };
+    }
+    userMessage =
+      "# OPPGAVE\nSvar på en e-konsultasjon fra pasienten.\n\n" +
+      "# STIKKORD OG FØRING FRA MAGNUS\n" +
+      ((stikkord || "").trim() || "(tomt)") +
+      "\n\n# E-KONSULTASJON FRA PASIENT\n" +
+      melding.trim();
+  }
 
   const model = ai.model || DEFAULT_MODEL;
   const body = {
@@ -238,7 +301,7 @@ async function generate({ stikkord, melding }) {
     system: [
       { type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }
     ],
-    output_config: { format: { type: "json_schema", schema: OUTPUT_SCHEMA } },
+    output_config: { format: { type: "json_schema", schema: outgoing ? OUTGOING_SCHEMA : REPLY_SCHEMA } },
     messages: [{ role: "user", content: userMessage }]
   };
   // Adaptiv tenking støttes på Opus 4.6+/Sonnet 4.6+/Fable, men ikke Haiku 4.5.
@@ -294,7 +357,12 @@ async function generate({ stikkord, melding }) {
     return { ok: false, error: "Kunne ikke tolke svaret fra modellen." };
   }
 
-  return { ok: true, svar: parsed.svar || "", journalnotat: parsed.journalnotat || "" };
+  return {
+    ok: true,
+    emne: parsed.emne || "",
+    svar: parsed.svar || "",
+    journalnotat: parsed.journalnotat || ""
+  };
 }
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
@@ -303,6 +371,151 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       .then(sendResponse)
       .catch((e) => sendResponse({ ok: false, error: String((e && e.message) || e) }));
     return true; // hold kanalen åpen for async svar
+  }
+  return false;
+});
+
+/* ==================== migrering, seeding og hotstrings ==================== */
+
+const DEFAULT_DOMAINS = ["pasientsky.no", "fastlegen.com"];
+
+const SIGNATUR = "Hilsen Magnus K S Andersen\nKystveien Legesenter";
+
+// Forhåndsdefinerte hurtigknapper — alle redigerbare i innstillingene.
+const DEFAULT_QUICK_BUTTONS = {
+  "qb.1": {
+    label: "Prøver normale",
+    view: "utgaaende",
+    type: "mal",
+    emne: "Svar på prøver",
+    tekst: "Hei!\n\nDet har nå kommet svar på prøvene dine, og alle var fine.\n\nVed spørsmål ta kontakt.\n\n" + SIGNATUR,
+    notat: "E-konsultasjon: Prøvesvar formidlet. Alle prøver normale.",
+    order: 1
+  },
+  "qb.2": {
+    label: "D-vit lav",
+    view: "utgaaende",
+    type: "ki",
+    tekst: "prøvesvar: d-vitamin litt lav, ellers fine prøver. anbefal reseptfritt tilskudd/Divisun, kontroll om 3 mnd",
+    order: 2
+  },
+  "qb.3": {
+    label: "Resept sendt",
+    view: "svar",
+    type: "mal",
+    tekst: "Hei!\n\nResept sendt inn 👍\n\n" + SIGNATUR,
+    notat: "E-konsultasjon: Ønsker fornyelse av fast resept. Resept sendt.",
+    order: 3
+  },
+  "qb.4": {
+    label: "Be om time",
+    view: "svar",
+    type: "ki",
+    tekst: "dette egner seg ikke på melding, be pasienten bestille time, vennlig forklaring",
+    order: 4
+  }
+};
+
+// Flytt gammel lokal konfigurasjon til sync (én gang) og seed standarddata.
+async function migrateAndSeed() {
+  const sync = await sGet(null);
+
+  if (!sync.__migratedV2) {
+    const local = await lGet(["settings", "ai", "fieldMap", "dialogMap"]);
+    const out = {};
+    for (const k of ["settings", "ai", "fieldMap", "dialogMap"]) {
+      if (sync[k] === undefined && local[k] !== undefined) out[k] = local[k];
+    }
+    out.__migratedV2 = true;
+    await sSet(out);
+    try { chrome.storage.local.remove(["settings", "ai", "fieldMap", "dialogMap"]); } catch (e) {}
+  }
+
+  if (!Array.isArray(sync.hsDomains)) {
+    await sSet({ hsDomains: DEFAULT_DOMAINS.slice() });
+  }
+
+  if (!sync.__qbSeeded) {
+    const hasQb = Object.keys(sync).some((k) => k.indexOf("qb.") === 0);
+    if (!hasQb) await sSet(DEFAULT_QUICK_BUTTONS);
+    await sSet({ __qbSeeded: true });
+  }
+}
+
+/* ---------- dynamisk registrering av hotstrings.js ----------
+   Domenelisten ligger i sync og deles mellom maskiner, men tillatelser
+   (chrome.permissions) er per maskin — domener uten tillatelse hoppes over
+   her og får en «Gi tilgang»-knapp i innstillingene. */
+function cleanDomain(d) {
+  return String(d || "")
+    .trim()
+    .toLowerCase()
+    .replace(/^[a-z]+:\/\//, "")
+    .replace(/\/.*$/, "")
+    .replace(/^\*\.?/, "");
+}
+
+function patternsFor(domain) {
+  return ["*://" + domain + "/*", "*://*." + domain + "/*"];
+}
+
+function hasOriginPermission(patterns) {
+  return new Promise((resolve) => {
+    try {
+      chrome.permissions.contains({ origins: patterns }, (ok) => {
+        void chrome.runtime.lastError;
+        resolve(!!ok);
+      });
+    } catch (e) { resolve(false); }
+  });
+}
+
+async function updateHotstringRegistration() {
+  const { hsDomains } = await sGet("hsDomains");
+  const domains = (Array.isArray(hsDomains) ? hsDomains : DEFAULT_DOMAINS)
+    .map(cleanDomain)
+    .filter(Boolean);
+
+  const matches = [];
+  for (const d of domains) {
+    const pats = patternsFor(d);
+    if (await hasOriginPermission(pats)) matches.push(...pats);
+  }
+
+  try {
+    await chrome.scripting.unregisterContentScripts({ ids: ["flk-hotstrings"] }).catch(() => {});
+    if (matches.length) {
+      await chrome.scripting.registerContentScripts([{
+        id: "flk-hotstrings",
+        js: ["hotstrings.js"],
+        matches,
+        allFrames: true,
+        runAt: "document_idle",
+        persistAcrossSessions: true
+      }]);
+    }
+  } catch (e) {
+    console.warn("[FLK] Klarte ikke registrere hotstrings-script:", e);
+  }
+}
+
+async function init() {
+  await migrateAndSeed();
+  await updateHotstringRegistration();
+}
+
+chrome.runtime.onInstalled.addListener(() => { init(); });
+chrome.runtime.onStartup.addListener(() => { init(); });
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "sync" && changes.hsDomains) updateHotstringRegistration();
+});
+
+// Kall fra options-siden når en tillatelse nettopp er gitt på denne maskinen.
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg && msg.action === "flkRefreshHotstrings") {
+    updateHotstringRegistration().then(() => sendResponse({ ok: true }));
+    return true;
   }
   return false;
 });

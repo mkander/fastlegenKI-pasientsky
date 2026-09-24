@@ -4,25 +4,67 @@
   <meta charset="UTF-8" />
   <title>Innstillinger – FastlegeKI → PasientSky</title>
   <style>
-    body { font: 14px/1.5 Roboto, "Segoe UI", system-ui, sans-serif; color: #1a1a1a; max-width: 640px; margin: 24px auto; padding: 0 16px; }
+    body { font: 14px/1.5 Roboto, "Segoe UI", system-ui, sans-serif; color: #1a1a1a; max-width: 720px; margin: 24px auto; padding: 0 16px; }
     h1 { font-size: 20px; color: #0052e6; }
-    h2 { font-size: 15px; margin-top: 28px; }
+    h2 { font-size: 15px; margin-top: 30px; border-top: 1px solid #e2e6ee; padding-top: 18px; }
+    h3 { font-size: 13px; margin-top: 18px; }
     label { display: block; font-weight: 600; margin: 14px 0 4px; }
-    input[type="text"], input[type="password"], select { width: 100%; padding: 9px 10px; border: 1px solid #cfd6e4; border-radius: 8px; box-sizing: border-box; font: inherit; background: #fff; }
+    input[type="text"], input[type="password"], select, textarea { width: 100%; padding: 9px 10px; border: 1px solid #cfd6e4; border-radius: 8px; box-sizing: border-box; font: inherit; background: #fff; }
+    textarea { resize: vertical; min-height: 60px; }
     .row { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
     .row input[type="checkbox"] { width: 16px; height: 16px; }
     .hint { color: #5a6472; font-size: 12px; margin-top: 4px; }
     button { margin-top: 18px; margin-right: 8px; padding: 10px 16px; border: none; border-radius: 8px; background: #0052e6; color: #fff; font: 600 14px inherit; cursor: pointer; }
     button.secondary { background: #f4f6fb; color: #1a1a1a; border: 1px solid #cfd6e4; }
+    button.small { padding: 6px 10px; font-size: 12px; margin: 0; }
+    button.danger { background: #fdecea; color: #b3261e; border: 1px solid #f0b6b1; }
     #status { margin-left: 8px; color: #137a3f; font-weight: 600; }
     .map { background: #f4f6fb; border: 1px solid #e2e6ee; border-radius: 8px; padding: 10px 12px; font-size: 12px; white-space: pre-wrap; word-break: break-all; }
+    .card { border: 1px solid #e2e6ee; border-radius: 10px; padding: 12px; margin-top: 10px; background: #fbfcfe; }
+    .card .grid { display: grid; grid-template-columns: 1fr 150px 150px auto; gap: 8px; align-items: end; }
+    .card label { margin: 8px 0 3px; font-size: 12px; }
+    .card .full { grid-column: 1 / -1; }
+    .dom-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+    .dom-name { flex: 1; font-family: ui-monospace, monospace; font-size: 13px; }
+    .dom-warn { color: #b3261e; font-size: 12px; }
+    .hs-grid { display: grid; grid-template-columns: 140px 1fr auto; gap: 8px; align-items: start; margin-top: 8px; }
+    .sticky-save { position: sticky; bottom: 0; background: #fff; padding: 10px 0 16px; border-top: 1px solid #e2e6ee; margin-top: 26px; }
   </style>
 </head>
 <body>
   <h1>FastlegeKI → PasientSky</h1>
-  <p>Notatet fra FastlegeKI deles på overskriftene under, og hver del legges i sitt felt i PasientSky.</p>
+  <p class="hint">Alle innstillinger (inkludert API-nøkkel, hotstrings og hurtigknapper) synkroniseres automatisk mellom maskiner via Chrome-profilen din.</p>
 
-  <h2>Overskrifter (i feltrekkefølge)</h2>
+  <h2>KI-generert svar (Claude)</h2>
+  <p class="hint">Brukes av «Generer svar»-knappen i PasientSky-dialoger. Opprett nøkkel på <code>console.anthropic.com</code>.</p>
+  <label for="apiKey">Anthropic API-nøkkel</label>
+  <input type="password" id="apiKey" placeholder="sk-ant-..." autocomplete="off" />
+  <label for="aiModel">Modell</label>
+  <select id="aiModel">
+    <option value="claude-opus-4-8">Claude Opus 4.8 (anbefalt)</option>
+    <option value="claude-sonnet-5">Claude Sonnet 5 (raskere og billigere)</option>
+    <option value="claude-haiku-4-5">Claude Haiku 4.5 (raskest, enklest)</option>
+  </select>
+
+  <h2>Hurtigknapper</h2>
+  <p class="hint">Vises ved svar-/tekstfeltet i PasientSky. <b>Mal</b> settes inn umiddelbart (emne/tekst/journalnotat slik du har skrevet dem). <b>KI-stikkord</b> sendes til Claude og genereres med variasjon. De tre første per visning vises som knapper, resten i ⋯-menyen. Journalnotatet legges på utklippstavlen.</p>
+  <div id="qbList"></div>
+  <button id="qbAdd" class="secondary" type="button">+ Legg til knapp</button>
+
+  <h2>Hotstrings (tekstutvidelse)</h2>
+  <p class="hint">Skriv koden i et tekstfelt og trykk mellomrom/enter/tab, så byttes den ut med teksten. Plassholdere: <code>{dato}</code> (dagens dato) og <code>{kursor}</code> (markørposisjon; skilletegnet slukes). Backspace rett etter en utvidelse gjenoppretter koden. Fungerer aldri i passordfelt.</p>
+  <div id="hsList"></div>
+  <button id="hsAdd" class="secondary" type="button">+ Legg til hotstring</button>
+
+  <h3>Aktive domener</h3>
+  <p class="hint">Hotstrings er aktive på disse domenene. Nye domener krever en engangs-tillatelse <i>per maskin</i> — mangler den på denne maskinen, vises en «Gi tilgang»-knapp.</p>
+  <div id="domList"></div>
+  <div class="dom-row">
+    <input type="text" id="domNew" placeholder="feks helsenorge.no" />
+    <button id="domAdd" class="secondary small" type="button">Legg til</button>
+  </div>
+
+  <h2>Overskrifter for FastlegeKI-overføring (i feltrekkefølge)</h2>
   <p class="hint">Skriv de faktiske overskriftene slik de står i notatet. Felt 1 får teksten under overskrift 1, osv. Kolon, markdown (**, #) og store/små bokstaver ignoreres ved sammenligning.</p>
   <label for="h1">Overskrift for Felt 1</label>
   <input type="text" id="h1" />
@@ -43,26 +85,21 @@
   <input type="text" id="sourceField" />
   <p class="hint">Standard: <code>#responseBox</code> (notatfeltet). Endre kun om du vil kopiere fra et annet felt.</p>
 
-  <h2>KI-generert svar (Claude)</h2>
-  <p class="hint">Brukes av «Generer svar»-knappen i PasientSky-dialoger. Nøkkelen lagres kun lokalt i nettleseren. Opprett nøkkel på <code>console.anthropic.com</code>.</p>
-  <label for="apiKey">Anthropic API-nøkkel</label>
-  <input type="password" id="apiKey" placeholder="sk-ant-..." autocomplete="off" />
-  <label for="aiModel">Modell</label>
-  <select id="aiModel">
-    <option value="claude-opus-4-8">Claude Opus 4.8 (anbefalt)</option>
-    <option value="claude-sonnet-5">Claude Sonnet 5 (raskere og billigere)</option>
-    <option value="claude-haiku-4-5">Claude Haiku 4.5 (raskest, enklest)</option>
-  </select>
-  <p class="hint">Dialogen kobles i PasientSky via «Koble dialog for KI-svar» i utvidelsens popup: klikk på pasientens melding, deretter på svarfeltet. Status:</p>
-  <div id="dialogStatus" class="map">Laster…</div>
-  <button id="resetDialog" class="secondary" type="button">Nullstill dialogkobling</button>
-
-  <h2>Kobling av PasientSky-felt</h2>
-  <p class="hint">Feltene kobles ved å klikke på dem i PasientSky (knappen «Koble felt» nede til venstre). Status:</p>
+  <h2>Koblinger i PasientSky</h2>
+  <p class="hint">Journalfelter kobles med «Koble felt», dialog og ny melding via utvidelsens popup. Status:</p>
   <div id="mapStatus" class="map">Laster…</div>
   <button id="resetMap" class="secondary" type="button">Nullstill feltkobling</button>
+  <div id="dialogStatus" class="map" style="margin-top:10px;">Laster…</div>
+  <button id="resetDialog" class="secondary" type="button">Nullstill dialogkobling</button>
+  <button id="resetOutgoing" class="secondary" type="button">Nullstill ny melding-kobling</button>
 
-  <div>
+  <h2>Sikkerhetskopi</h2>
+  <p class="hint">Eksporten inneholder alle innstillinger, inkludert API-nøkkelen — oppbevar filen deretter (f.eks. i Dropbox). Import overskriver eksisterende innstillinger.</p>
+  <button id="exportBtn" class="secondary" type="button">Eksporter innstillinger (JSON)</button>
+  <button id="importBtn" class="secondary" type="button">Importer…</button>
+  <input type="file" id="importFile" hidden accept="application/json,.json" />
+
+  <div class="sticky-save">
     <button id="save" type="button">Lagre innstillinger</button>
     <button id="restoreDefaults" class="secondary" type="button">Tilbakestill overskrifter</button>
     <span id="status"></span>

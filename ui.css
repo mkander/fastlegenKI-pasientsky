@@ -109,6 +109,53 @@
 .flk-ai-btn.flk-ai-primary { background: #0052e6; color: #fff; border-color: #0052e6; }
 .flk-ai-btn.flk-ai-primary:hover:not(:disabled) { background: #0046c7; }
 
+/* nedtrekksmeny for ekstra hurtigknapper */
+.flk-ai-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  border-radius: 10px;
+  background: #ffffff;
+  border: 1px solid #e2e6ee;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.25);
+  z-index: 2147483647;
+}
+.flk-ai-menuitem { text-align: left; }
+
+/* prøvesvar-panel */
+.flk-ai-panel {
+  position: fixed;
+  z-index: 2147483647;
+  width: 420px;
+  max-width: calc(100vw - 24px);
+  padding: 12px;
+  border-radius: 12px;
+  background: #ffffff;
+  border: 1px solid #e2e6ee;
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.28);
+  font: 400 13px/1.35 Roboto, "Segoe UI", system-ui, sans-serif;
+  color: #1a1a1a;
+}
+.flk-ai-panel-title { font-weight: 700; font-size: 13px; color: #0052e6; margin-bottom: 4px; }
+.flk-ai-panel-hint { font-size: 11px; color: #5a6472; margin-bottom: 8px; }
+.flk-ai-textarea {
+  width: 100%;
+  height: 140px;
+  box-sizing: border-box;
+  padding: 8px 9px;
+  border: 1px solid #cfd6e4;
+  border-radius: 8px;
+  font: 400 12.5px/1.4 Roboto, "Segoe UI", system-ui, sans-serif;
+  resize: vertical;
+  background: #f9fafc;
+}
+.flk-ai-textarea:focus { outline: none; border-color: #0052e6; background: #fff; }
+.flk-ai-panel-row { display: flex; gap: 8px; margin-top: 8px; }
+
 .flk-toast {
   position: fixed;
   left: 20px;

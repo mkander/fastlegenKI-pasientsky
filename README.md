@@ -4,8 +4,14 @@ Chrome-utvidelse som overfører notattekst fra **FastlegeKI** til journalfeltene
 **PasientSky**. Teksten deles automatisk i 4 deler ut fra overskrifter du selv
 konfigurerer, og hver del legges i sitt felt i PasientSky.
 
-I tillegg kan utvidelsen **generere KI-forslag til svar på e-konsultasjoner**
-direkte i PasientSky-dialogen, med Claude API (se egen seksjon under).
+I tillegg kan utvidelsen **generere KI-forslag til meldinger** (svar på
+e-konsultasjoner og utgående meldinger) direkte i PasientSky med Claude API,
+og **utvide hotstrings til tekst** på valgfrie domener (se egne seksjoner).
+
+Alle innstillinger — API-nøkkel, hotstrings, hurtigknapper, koblinger —
+lagres i `chrome.storage.sync` og følger Chrome-profilen din automatisk
+mellom maskiner. Kun runtime-tilstand (overført tekst, lær-modus, triggere)
+er lokal per maskin. Innstillingene kan også eksporteres/importeres som JSON.
 
 ## Hvordan det virker
 
@@ -76,6 +82,37 @@ utklippstavlen (klart til å limes inn i journalen).
 Selve prompten (rolle, skrivestil, norsk medisinsk kontekst, røde flagg osv.)
 ligger innebygd i `background.js`.
 
+### Utgående meldinger (ny melding med emnefelt)
+
+1. Koble én gang: popup → **«Koble ny melding for KI»**, klikk i emnefeltet og
+   deretter i tekstfeltet.
+2. I «ny melding»-visningen viser KI-linjen i tillegg **hurtigknapper** og en
+   **«🧪 Prøvesvar»**-knapp. Generering fyller både emne og tekst, og
+   journalnotatet legges på utklippstavlen.
+3. **Prøvesvar**: lim inn prøvesvar/røntgensvar i panelet — fødselsnummer
+   fjernes automatisk før sending — og KI-en lager emne, melding med
+   forklaring/plan og journalnotat.
+
+### Hurtigknapper
+
+Konfigurerbare i innstillingene, med visning (svar/utgående/begge) og type:
+**Mal** (emne/tekst/journalnotat ferdig skrevet, settes inn umiddelbart) eller
+**KI-stikkord** (fast stikkord sendes til Claude). De tre første per visning
+vises som knapper, resten i ⋯-menyen.
+
+## Hotstrings (tekstutvidelse)
+
+Skriv en kode (f.eks. `mvh`) i et tekstfelt og trykk mellomrom/enter/tab —
+koden byttes ut med teksten du har definert i innstillingene. Plassholdere:
+`{dato}` (dagens dato) og `{kursor}` (markørposisjon; skilletegnet slukes).
+Backspace rett etter en utvidelse gjenoppretter koden. Aldri aktiv i
+passordfelt.
+
+Aktive domener styres i innstillingene (standard: pasientsky.no og
+fastlegen.com). Nye domener krever en engangs-tillatelse per maskin — Chrome
+spør når du legger til domenet, og på andre maskiner vises en
+«Gi tilgang»-knapp i innstillingene.
+
 ## Innstillinger
 
 - **Overskrifter (Felt 1–4):** Teksten deles på disse. Kolon, markdown (`**`, `#`)
@@ -93,8 +130,9 @@ ligger innebygd i `background.js`.
 | `util.js` | Felles hjelpere (deling, selektorer, fylling, toast) |
 | `source.js` | FastlegeKI: «Overfør tekst»-knapp |
 | `destination.js` | PasientSky: lær-felt-modus + innliming (alle frames) |
-| `dialog.js` | PasientSky: «Generer svar»-knapp i dialog + dialogkobling |
-| `background.js` | Service worker: Claude API-kall + innebygd prompt |
+| `dialog.js` | PasientSky: KI-linje for svar og utgående melding, hurtigknapper, prøvesvar-panel |
+| `hotstrings.js` | Tekstutvidelse, registreres dynamisk på domenene i domenelisten |
+| `background.js` | Service worker: Claude API-kall, innebygd prompt, migrering, hotstring-registrering |
 | `options.html` / `options.js` | Innstillinger |
 | `popup.html` / `popup.js` | Hurtigknapper fra verktøylinjen |
 | `ui.css` | Stiler for knapp, panel og toast |

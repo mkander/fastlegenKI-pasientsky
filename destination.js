@@ -97,8 +97,9 @@
   }
 
   /* ---------------- reager på storage-endringer ---------------- */
-  F.onChanged((changes, area) => {
-    if (area !== "local") return;
+  // Nøkler kan komme fra både local (learnState, fillTrigger, transfer) og
+  // sync (fieldMap – deles mellom maskiner); nøkkelnavn er unike på tvers.
+  F.onChanged((changes, _area) => {
     if (changes.learnState) learnStateCache = changes.learnState.newValue || { active: false, index: 0 };
     if (changes.fillTrigger) doFill();
     if (isTop && (changes.learnState || changes.fieldMap || changes.transfer)) updatePanel();
