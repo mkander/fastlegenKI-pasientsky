@@ -4,7 +4,7 @@
 (function () {
   "use strict";
   if (window.FLK) return; // unngå dobbel-injeksjon (PasientSky har mange frames)
-  console.log("[FLK] util.js v7 lastet i", location.href);
+  console.log("[FLK] util.js v8 lastet i", location.href);
 
   const DEFAULTS = {
     headings: ["OVERSKRIFT1", "OVERSKRIFT2", "OVERSKRIFT3", "OVERSKRIFT4"],
@@ -13,35 +13,108 @@
   };
 
   /* ---------- storage (promise-wrappere) ----------
+     To lagringsområder:
+       - chrome.storage.sync: konfigurasjon som skal følge Chrome-profilen på
+         tvers av maskiner (innstillinger, API-oppsett, felt-/dialogkoblinger,
+         hotstrings "hs.*", hurtigknapper "qb.*", domeneliste).
+       - chrome.storage.local: runtime-koordinering som IKKE skal synces
+         (overført tekst, lær-tilstand, fylle-triggere, frame-handshakes) —
+         ellers ville et klikk på én maskin trigge handlinger på en annen,
+         og sync-kvotene ville sprenges av hyppige skriv.
+     get/set/remove ruter automatisk per nøkkel.
      Defensive: noen PasientSky-iframes er sandboxed/opaque-origin der
      content-scriptet kjører, men chrome.storage-API-et ikke finnes. Da
      resolver vi tomt i stedet for å kaste. */
-  function storageOk() {
-    try { return !!(chrome && chrome.storage && chrome.storage.local); }
+  const SYNC_KEYS = ["settings", "ai", "fieldMap", "dialogMap", "outgoingMap", "hsDomains"];
+  const SYNC_PREFIXES = ["hs.", "qb."];
+  function isSyncKey(k) {
+    if (SYNC_KEYS.indexOf(k) !== -1) return true;
+    for (let i = 0; i < SYNC_PREFIXES.length; i++) {
+      if (k.indexOf(SYNC_PREFIXES[i]) === 0) return true;
+    }
+    return false;
+  }
+  function areaOk(name) {
+    try { return !!(chrome && chrome.storage && chrome.storage[name]); }
     catch (e) { return false; }
   }
-  function get(keys) {
+  function areaGet(name, keys) {
     return new Promise((res) => {
-      if (!storageOk()) return res({});
+      if (!areaOk(name)) return res({});
       try {
-        chrome.storage.local.get(keys, (r) => {
+        chrome.storage[name].get(keys, (r) => {
           const err = chrome.runtime && chrome.runtime.lastError;
           res(err ? {} : (r || {}));
         });
       } catch (e) { res({}); }
     });
   }
-  function set(obj) {
+  function areaSet(name, obj) {
     return new Promise((res) => {
-      if (!storageOk()) return res();
+      if (!areaOk(name)) return res();
       try {
-        chrome.storage.local.set(obj, () => {
+        chrome.storage[name].set(obj, () => {
           void (chrome.runtime && chrome.runtime.lastError);
           res();
         });
       } catch (e) { res(); }
     });
   }
+  function areaRemove(name, keys) {
+    return new Promise((res) => {
+      if (!areaOk(name)) return res();
+      try {
+        chrome.storage[name].remove(keys, () => {
+          void (chrome.runtime && chrome.runtime.lastError);
+          res();
+        });
+      } catch (e) { res(); }
+    });
+  }
+  function get(keys) {
+    const list = Array.isArray(keys) ? keys : [keys];
+    const syncKeys = list.filter(isSyncKey);
+    const localKeys = list.filter((k) => !isSyncKey(k));
+    return Promise.all([
+      syncKeys.length ? areaGet("sync", syncKeys) : {},
+      localKeys.length ? areaGet("local", localKeys) : {}
+    ]).then(([s, l]) => Object.assign({}, s, l));
+  }
+  function set(obj) {
+    const syncObj = {};
+    const localObj = {};
+    let hasSync = false;
+    let hasLocal = false;
+    for (const k of Object.keys(obj)) {
+      if (isSyncKey(k)) { syncObj[k] = obj[k]; hasSync = true; }
+      else { localObj[k] = obj[k]; hasLocal = true; }
+    }
+    return Promise.all([
+      hasSync ? areaSet("sync", syncObj) : null,
+      hasLocal ? areaSet("local", localObj) : null
+    ]);
+  }
+  function remove(keys) {
+    const list = Array.isArray(keys) ? keys : [keys];
+    const syncKeys = list.filter(isSyncKey);
+    const localKeys = list.filter((k) => !isSyncKey(k));
+    return Promise.all([
+      syncKeys.length ? areaRemove("sync", syncKeys) : null,
+      localKeys.length ? areaRemove("local", localKeys) : null
+    ]);
+  }
+  // Alle nøkler i sync-området som starter med et prefiks (f.eks. "hs.", "qb.")
+  function getPrefixed(prefix) {
+    return areaGet("sync", null).then((all) => {
+      const out = {};
+      for (const k of Object.keys(all || {})) {
+        if (k.indexOf(prefix) === 0) out[k] = all[k];
+      }
+      return out;
+    });
+  }
+  // Lytter på begge områdene; nøkkelnavnene er unike på tvers, så mottaker
+  // kan sjekke på nøkkel uten å bry seg om area.
   function onChanged(cb) {
     try {
       if (chrome && chrome.storage && chrome.storage.onChanged) {
@@ -484,7 +557,8 @@
   }
 
   window.FLK = {
-    DEFAULTS, get, set, onChanged, getSettings, getFieldMap, getTransfer,
+    DEFAULTS, get, set, remove, getPrefixed, onChanged,
+    getSettings, getFieldMap, getTransfer,
     splitByHeadings, normHeading,
     isEditable, editableFrom, cssPath, captureAttrs, findElement,
     setNativeValue, fillField, fillContentEditable, toast, frameKey
