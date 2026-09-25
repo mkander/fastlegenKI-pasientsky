@@ -114,6 +114,29 @@ fastlegen.com). Nye domener krever en engangs-tillatelse per maskin — Chrome
 spør når du legger til domenet, og på andre maskiner vises en
 «Gi tilgang»-knapp i innstillingene.
 
+## Synkronisering mellom maskiner – feilsøking
+
+Synkroniseringen bruker `chrome.storage.sync`, som er adskilt **per
+utvidelses-ID**. Manifestet inneholder derfor en fast `key`, slik at
+utvidelsen får samme ID uansett hvilken mappe den lastes fra. Sjekkliste hvis
+innstillinger ikke dukker opp på den andre maskinen:
+
+1. **Samme utvidelses-ID:** `chrome://extensions` skal vise identisk ID på
+   begge maskinene (versjon 1.2.2+ med `key` i manifestet gir alltid samme ID).
+2. **Samme versjon av utvidelsen** på begge maskinene (trykk ↻ etter å ha
+   hentet ny kode).
+3. **Chrome-synkronisering på:** Innstillinger → Synkronisering → «Utvidelser»
+   må være med (standard ved «Synkroniser alt»).
+4. Gi det litt tid — Chrome synkroniserer vanligvis innen sekunder, men kan
+   bruke noen minutter.
+
+**Merk ved oppgradering til 1.2.2:** fast `key` betyr ny utvidelses-ID, og
+lagringen under den gamle ID-en blir liggende igjen. Innstillingene fremstår
+derfor som nullstilt én gang. Gjør slik på maskinen med riktig oppsett:
+eksporter innstillingene (JSON) **før** du oppdaterer, oppdater og trykk ↻,
+og importer filen etterpå. Den andre maskinen trenger bare oppdatering —
+innstillingene kommer via sync.
+
 ## Innstillinger
 
 - **Overskrifter (Felt 1–4):** Teksten deles på disse. Kolon, markdown (`**`, `#`)

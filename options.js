@@ -12,8 +12,20 @@
   const $ = (id) => document.getElementById(id);
 
   function sGet(keys) { return new Promise((r) => chrome.storage.sync.get(keys, (v) => { void chrome.runtime.lastError; r(v || {}); })); }
-  function sSet(obj) { return new Promise((r) => chrome.storage.sync.set(obj, () => { void chrome.runtime.lastError; r(); })); }
-  function sRemove(keys) { return new Promise((r) => chrome.storage.sync.remove(keys, () => { void chrome.runtime.lastError; r(); })); }
+  // Skriv-operasjoner skal feile HØYT: en stille sync-feil (kvote, for stort
+  // element) ville ellers vist «Lagret ✔» uten at noe faktisk ble lagret.
+  function sSet(obj) {
+    return new Promise((res, rej) => chrome.storage.sync.set(obj, () => {
+      const err = chrome.runtime.lastError;
+      if (err) rej(new Error(err.message)); else res();
+    }));
+  }
+  function sRemove(keys) {
+    return new Promise((res, rej) => chrome.storage.sync.remove(keys, () => {
+      const err = chrome.runtime.lastError;
+      if (err) rej(new Error(err.message)); else res();
+    }));
+  }
   function lSet(obj) { return new Promise((r) => chrome.storage.local.set(obj, () => { void chrome.runtime.lastError; r(); })); }
 
   function el(tag, cls, text) {
@@ -212,8 +224,10 @@
       const del = el("button", "danger small", "Fjern");
       del.type = "button";
       del.addEventListener("click", async () => {
-        const cur = (await sGet("hsDomains")).hsDomains || [];
-        await sSet({ hsDomains: cur.filter((x) => x !== d) });
+        try {
+          const cur = (await sGet("hsDomains")).hsDomains || [];
+          await sSet({ hsDomains: cur.filter((x) => x !== d) });
+        } catch (err) { alert("Lagring feilet: " + err.message); }
         renderDomains();
       });
       row.appendChild(del);
@@ -228,11 +242,13 @@
     chrome.permissions.request({ origins: patternsFor(d) }, async (granted) => {
       void chrome.runtime.lastError;
       if (!granted) { alert("Tillatelsen ble avvist – domenet ble ikke lagt til."); return; }
-      const cur = (await sGet("hsDomains")).hsDomains || [];
-      if (cur.indexOf(d) === -1) {
-        cur.push(d);
-        await sSet({ hsDomains: cur });
-      }
+      try {
+        const cur = (await sGet("hsDomains")).hsDomains || [];
+        if (cur.indexOf(d) === -1) {
+          cur.push(d);
+          await sSet({ hsDomains: cur });
+        }
+      } catch (err) { alert("Lagring feilet: " + err.message); return; }
       $("domNew").value = "";
       refreshHotstrings();
       renderDomains();
@@ -317,13 +333,18 @@
     const stale = Object.keys(all).filter(
       (k) => (k.indexOf("qb.") === 0 && !(k in qb)) || (k.indexOf("hs.") === 0 && !(k in hs))
     );
-    if (stale.length) await sRemove(stale);
-
-    await sSet(Object.assign({ settings, ai }, qb, hs));
 
     const st = $("status");
-    st.textContent = "Lagret ✔";
-    setTimeout(() => (st.textContent = ""), 2000);
+    try {
+      if (stale.length) await sRemove(stale);
+      await sSet(Object.assign({ settings, ai }, qb, hs));
+      st.style.color = "";
+      st.textContent = "Lagret ✔";
+      setTimeout(() => (st.textContent = ""), 2000);
+    } catch (err) {
+      st.style.color = "#b3261e";
+      st.textContent = "Lagring feilet: " + (err && err.message ? err.message : err);
+    }
     renderQb();
     renderHs();
   }
@@ -382,18 +403,24 @@
     $("h4").value = DEFAULTS.headings[3];
   });
   $("resetMap").addEventListener("click", async () => {
-    await sSet({ fieldMap: [] });
-    await lSet({ learnState: { active: false, index: 0 } });
+    try {
+      await sSet({ fieldMap: [] });
+      await lSet({ learnState: { active: false, index: 0 } });
+    } catch (err) { alert("Lagring feilet: " + err.message); }
     renderMap();
   });
   $("resetDialog").addEventListener("click", async () => {
-    await sSet({ dialogMap: {} });
-    await lSet({ dialogLearn: { active: false, step: 0 } });
+    try {
+      await sSet({ dialogMap: {} });
+      await lSet({ dialogLearn: { active: false, step: 0 } });
+    } catch (err) { alert("Lagring feilet: " + err.message); }
     renderDialog();
   });
   $("resetOutgoing").addEventListener("click", async () => {
-    await sSet({ outgoingMap: {} });
-    await lSet({ outgoingLearn: { active: false, step: 0 } });
+    try {
+      await sSet({ outgoingMap: {} });
+      await lSet({ outgoingLearn: { active: false, step: 0 } });
+    } catch (err) { alert("Lagring feilet: " + err.message); }
     renderDialog();
   });
 
