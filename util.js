@@ -4,7 +4,7 @@
 (function () {
   "use strict";
   if (window.FLK) return; // unngå dobbel-injeksjon (PasientSky har mange frames)
-  console.log("[FLK] util.js v9 lastet i", location.href);
+  console.log("[FLK] util.js v10 lastet i", location.href);
 
   const DEFAULTS = {
     headings: ["OVERSKRIFT1", "OVERSKRIFT2", "OVERSKRIFT3", "OVERSKRIFT4"],
@@ -190,8 +190,10 @@
     const tag = el.tagName;
     if (tag === "TEXTAREA") return true;
     if (tag === "INPUT") {
-      const t = (el.getAttribute("type") || "text").toLowerCase();
-      return ["text", "search", "email", "url", "tel", "number", ""].includes(t);
+      // el.type, ikke attributtet: ugyldige verdier (f.eks. PasientSky sitt
+      // type="input") tolkes av nettleseren som "text".
+      const t = (el.type || "text").toLowerCase();
+      return ["text", "search", "email", "url", "tel", "number"].includes(t);
     }
     if (el.isContentEditable) return true;
     return false;

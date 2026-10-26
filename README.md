@@ -107,8 +107,14 @@ kobles derfor for seg (to runder i popupen):
 
 **Alt+E** åpner ny eKontakt fra hvor som helst i PasientSky, også mens du
 skriver i et felt (som Alt+D for PasientSky-dialog, som er innebygd i
-PasientSky). Alt+E overstyrer Chromes egen Alt+E-meny inne i PasientSky.
-AltGr+E (€) påvirkes ikke. På Mac er hurtigtasten Option+E.
+PasientSky). Alt+E overstyrer Chromes egen Alt+E-meny inne i PasientSky,
+og PasientSkys egen Alt+E (Epikrise, elektronisk). AltGr+E (€) påvirkes
+ikke. På Mac er hurtigtasten Option+E.
+
+Knappen kan ligge i en meny som bare vises når musa hovrer over menylinja.
+Ved koblingen huskes også menyen rundt knappen, så Alt+E kan klikke en skjult
+knapp direkte, eller åpne menyen med simulert hover og klikke. Koble eKontakt
+på nytt etter oppdatering fra 1.3.0, slik at menyen blir registrert.
 
 KI-linjen, hurtigknappene og prøvesvar-panelet virker som for PasientSky:
 utgående eKontakt fyller emne og tekst, svar fyller svarfeltet. Hurtigknappene
