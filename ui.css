@@ -75,6 +75,8 @@
   position: fixed;
   z-index: 2147483646;
   display: inline-flex;
+  flex-wrap: nowrap;   /* alltid én linje */
+  white-space: nowrap;
   align-items: center;
   gap: 6px;
   padding: 5px 6px;

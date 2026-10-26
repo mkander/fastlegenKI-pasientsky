@@ -13,26 +13,36 @@
  *   prøvesvar/røntgensvar som KI-en lager melding av. Genereringen fyller
  *   både emne og tekst.
  *
- *   eKontakt (Helsenorge, utgående): klikk på knappen som åpner ny
- *   eKontakt, deretter emnefeltet og tekstfeltet. Alt+E trykker på knappen.
+ *   eKontakt (Helsenorge, utgående): emnefelt + tekstfelt, som ny melding.
+ *   Alt+E (åpne ny eKontakt) ligger i ekontakt.js.
  *
  *   Helsenorge-svar: som PasientSky-dialog, men egen kobling.
  *
- * Helsenorge-typene oppfører seg som sine PasientSky-motstykker og deler
- * hurtigknapper med dem. I begge visninger legges et kort journalnotat på
- * utklippstavlen. Hurtigknapper (sync-nøkler "qb.*") er enten faste maler
- * (settes inn umiddelbart) eller KI-stikkord (sendes til Claude). */
+ * Plassering: PasientSky-vinduer er iframer som ofte er for små til linjen.
+ * Ligger feltene i en iframe rett under toppvinduet, rapporterer den framen
+ * feltets posisjon til toppvinduet (postMessage), og toppvinduet tegner
+ * linjen over iframen. Knappene sender kommandoer tilbake; selve genereringen
+ * og utfyllingen skjer i framen som eier feltene. Ellers (felt i toppvinduet,
+ * eller dypere nøstet) tegnes linjen i framen selv som før.
+ *
+ * I begge visninger legges et kort journalnotat på utklippstavlen.
+ * Hurtigknapper (sync-nøkler "qb.*") er enten faste maler (settes inn
+ * umiddelbart) eller KI-stikkord (sendes til Claude). */
 (function () {
   "use strict";
   const F = window.FLK;
   if (!F) return;
   const isTop = window.top === window.self;
+  let isDirectChild = false;
+  try { isDirectChild = !isTop && window.parent === window.top; } catch (e) {}
+
+  const rid = () => Date.now().toString(36) + Math.random().toString(36).slice(2);
 
   /* ---------------- koblingstyper ----------------
    * mode avgjør KI-linjens oppførsel: "svar" (pasientmelding + svarfelt) eller
    * "utgaaende" (emne + tekst). Steg: message = pasientens melding (ikke
-   * redigerbar), button = knapp (klikket slippes gjennom), ellers skrivefelt.
-   * texts[i] vises før steg i; siste tekst når koblingen er ferdig. */
+   * redigerbar), ellers skrivefelt. texts[i] vises før steg i; siste tekst
+   * når koblingen er ferdig. */
   const KINDS = {
     dialog: {
       mapKey: "dialogMap", learnKey: "dialogLearn", mode: "svar", label: "dialogen",
@@ -54,12 +64,11 @@
     },
     hnOut: {
       mapKey: "hnOutMap", learnKey: "hnOutLearn", mode: "utgaaende", label: "eKontakt",
-      steps: ["button", "subject", "body"],
+      steps: ["subject", "body"],
       texts: [
-        "Klikk på knappen som åpner ny eKontakt (Helsenorge).",
-        "eKontakt-knapp koblet (Alt+E). Klikk nå i EMNEFELTET i eKontakt.",
+        "Klikk i EMNEFELTET i eKontakt-vinduet (Helsenorge).",
         "Emnefelt koblet. Klikk nå i tekstfeltet for meldingen.",
-        "eKontakt koblet! Alt+E og KI-linjen er klare. ✔"
+        "eKontakt koblet! KI-linjen vises ved tekstfeltet. ✔"
       ]
     },
     hnReply: {
@@ -115,36 +124,8 @@
     return el;
   }
 
-  const CLICKABLE = 'button,a,[role="button"],[role="menuitem"],[role="tab"],input[type="button"],input[type="submit"]';
-
-  // Klikk treffer ofte ikon/tekst inne i knappen — bruk selve knappen.
-  function clickableFrom(el) {
-    return (el && el.closest && el.closest(CLICKABLE)) || el;
-  }
-
-  function shortText(el) {
-    const t = ((el.innerText || el.textContent || "") + "").replace(/\s+/g, " ").trim();
-    return t.length <= 80 ? t : "";
-  }
-  // innerText kan avvike for skjulte elementer (CSS-transform av tekst o.l.)
-  function hiddenText(el) {
-    const t = ((el.textContent || "") + "").replace(/\s+/g, " ").trim();
-    return t.length <= 80 ? t : "";
-  }
-
-  function captureEntry(el, part) {
-    const attrs = F.captureAttrs(el);
-    const entry = { key: F.frameKey(), selector: F.cssPath(el), attrs };
-    if (part === "button") {
-      attrs.text = shortText(el);
-      // Knappen kan ligge i en meny som bare finnes mens musa hovrer over den.
-      // Husk forfedrene, så menyen kan åpnes igjen med simulert hover.
-      entry.ancestors = [];
-      for (let n = el.parentElement; n && n !== document.body && entry.ancestors.length < 10; n = n.parentElement) {
-        entry.ancestors.push(F.cssPath(n));
-      }
-    }
-    return entry;
+  function captureEntry(el) {
+    return { key: F.frameKey(), selector: F.cssPath(el), attrs: F.captureAttrs(el) };
   }
 
   function activeLearn() {
@@ -161,23 +142,17 @@
       const step = learn[name].step || 0;
       const part = kind.steps[step];
       if (!part) return;
-
-      let target;
-      if (part === "button") {
-        target = clickableFrom(e.target); // la klikket gå videre, så eKontakt åpnes
-      } else {
-        e.preventDefault();
-        e.stopPropagation();
-        target = part === "message" ? messageContainerFrom(e.target) : F.editableFrom(e.target);
-        if (!target) {
-          F.toast("Det var ikke et skrivefelt – klikk i " + FIELD_NAMES[part] + ".", "error");
-          return;
-        }
+      e.preventDefault();
+      e.stopPropagation();
+      const target = part === "message" ? messageContainerFrom(e.target) : F.editableFrom(e.target);
+      if (!target) {
+        F.toast("Det var ikke et skrivefelt – klikk i " + FIELD_NAMES[part] + ".", "error");
+        return;
       }
       const next = step + 1;
       const done = next >= kind.steps.length;
       learn[name] = done ? IDLE : { active: true, step: next }; // ikke registrer dobbeltklikk to ganger
-      saveStep(name, part, captureEntry(target, part), done, next);
+      saveStep(name, part, captureEntry(target), done, next);
     },
     true // capture-fase, foran PasientSky sin egen logikk
   );
@@ -187,8 +162,7 @@
     const map = (await F.get(kind.mapKey))[kind.mapKey] || {};
     map[part] = entry;
     await F.set({ [kind.mapKey]: map, [kind.learnKey]: done ? IDLE : { active: true, step: next } });
-    const label = part === "button" && entry.attrs.text ? " («" + entry.attrs.text + "»)" : "";
-    F.toast(kind.texts[next].replace("koblet", "koblet" + label), "ok");
+    F.toast(kind.texts[next], "ok");
   }
 
   async function toggleLearn(name) {
@@ -230,42 +204,6 @@
     return null;
   }
 
-  function isVisible(el) {
-    const r = el.getBoundingClientRect();
-    return r.width > 0 && r.height > 0;
-  }
-
-  // Knappen er heller ikke redigerbar. Kun entydige treff godtas; knappeteksten
-  // (f.eks. «eKontakt») er ofte det mest stabile kjennetegnet. Synlige treff
-  // foretrekkes; med allowHidden godtas også en skjult knapp (lukket meny),
-  // som kan klikkes programmatisk likevel.
-  function findButtonEl(entry, allowHidden) {
-    if (!entry) return null;
-    const a = entry.attrs || {};
-    const esc = (s) => String(s).replace(/(["\\])/g, "\\$1");
-    const uniq = (list) => {
-      const all = Array.from(list);
-      const vis = all.filter(isVisible);
-      if (vis.length === 1) return vis[0];
-      return allowHidden && vis.length === 0 && all.length === 1 ? all[0] : null;
-    };
-    const sels = [];
-    if (a.id) sels.push("#" + CSS.escape(a.id));
-    for (const k of Object.keys(a.data || {})) sels.push("[" + k + '="' + esc(a.data[k]) + '"]');
-    if (a.ariaLabel) sels.push('[aria-label="' + esc(a.ariaLabel) + '"]');
-    for (const sel of sels) {
-      try { const el = uniq(document.querySelectorAll(sel)); if (el) return el; } catch (e) {}
-    }
-    if (a.text) {
-      const el = uniq(Array.from(document.querySelectorAll(CLICKABLE)).filter((n) => shortText(n) === a.text || hiddenText(n) === a.text));
-      if (el) return el;
-    }
-    if (entry.selector) {
-      try { const el = uniq(document.querySelectorAll(entry.selector)); if (el) return el; } catch (e) {}
-    }
-    return null;
-  }
-
   function readMessageText(el) {
     return ((el.innerText || el.textContent || "") + "").trim();
   }
@@ -273,107 +211,6 @@
   function ownedEl(entry) {
     if (!entry || entry.key !== F.frameKey()) return null;
     return F.findElement(entry);
-  }
-
-  /* ---------------- Alt+E: åpne ny eKontakt ----------------
-   * Tasten fanges i den framen som har fokus. Ligger knappen i en annen frame,
-   * sendes en forespørsel via storage ("hnClick"); framen som finner knappen
-   * klikker og kvitterer. Uten kvittering vises en feilmelding. */
-  let pendingClick = null;
-
-  document.addEventListener(
-    "keydown",
-    function (e) {
-      // AltGr er Ctrl+Alt på Windows (AltGr+E = €) og skal ikke fanges.
-      if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || e.code !== "KeyE") return;
-      e.preventDefault(); // også Chromes egen Alt+E-meny og Option+E (´) på Mac
-      e.stopPropagation();
-      if (!e.repeat) openEkontakt();
-    },
-    true
-  );
-
-  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-  function fireHover(el, type) {
-    const opts = { bubbles: type !== "mouseenter" && type !== "mouseleave", cancelable: true, view: window };
-    try {
-      el.dispatchEvent(type.indexOf("pointer") === 0 ? new PointerEvent(type, opts) : new MouseEvent(type, opts));
-    } catch (e) {}
-  }
-
-  // Simuler at musa går inn over menyen knappen ligger i: nærmeste lagrede
-  // forelder som finnes og er synlig nå (menyfeltet i menylinja).
-  function hoverAnchor(entry) {
-    for (const sel of entry.ancestors || []) {
-      try {
-        const el = document.querySelector(sel);
-        if (el && isVisible(el)) return el;
-      } catch (e) {}
-    }
-    return null;
-  }
-  function hoverChain(anchor) {
-    const chain = [];
-    for (let n = anchor; n && n !== document.documentElement; n = n.parentElement) chain.unshift(n);
-    return chain; // ytterst først, som ekte mouseenter
-  }
-
-  // Finn og klikk knappen i denne framen: synlig → skjult (lukket meny) →
-  // åpne menyen med simulert hover og vent på at knappen dukker opp.
-  async function clickButtonHere(entry) {
-    let btn = findButtonEl(entry, true);
-    if (btn) { btn.click(); return true; }
-    const anchor = hoverAnchor(entry);
-    if (!anchor) return false;
-    const chain = hoverChain(anchor);
-    fireHover(anchor, "pointerover");
-    fireHover(anchor, "mouseover");
-    for (const n of chain) { fireHover(n, "pointerenter"); fireHover(n, "mouseenter"); }
-    for (let i = 0; i < 15 && !btn; i++) {
-      await sleep(50);
-      btn = findButtonEl(entry, true);
-    }
-    if (btn) btn.click();
-    // lukk menyen igjen (som når musa går ut)
-    setTimeout(() => {
-      fireHover(anchor, "pointerout");
-      fireHover(anchor, "mouseout");
-      for (const n of chain.slice().reverse()) { fireHover(n, "pointerleave"); fireHover(n, "mouseleave"); }
-    }, 150);
-    return !!btn;
-  }
-
-  async function openEkontakt() {
-    const entry = maps.hnOut.button;
-    if (!entry) {
-      F.toast("eKontakt-knappen er ikke koblet. Bruk popup → «Koble eKontakt – ny melding».", "error");
-      return;
-    }
-    if (entry.key === F.frameKey() && await clickButtonHere(entry)) return;
-    if (pendingClick) clearTimeout(pendingClick.timer);
-    const req = Date.now() + "-" + Math.random().toString(36).slice(2);
-    pendingClick = {
-      req,
-      timer: setTimeout(() => {
-        pendingClick = null;
-        F.toast("Fant ikke eKontakt-knappen – er en pasient åpen? Koble eKontakt på nytt om den har flyttet seg.", "error");
-      }, 2500)
-    };
-    F.set({ hnClick: { req } });
-  }
-
-  async function handleClickRequest(v) {
-    if (!v || !v.req) return;
-    if (v.ok) {
-      if (pendingClick && pendingClick.req === v.req) { clearTimeout(pendingClick.timer); pendingClick = null; }
-      return;
-    }
-    if (pendingClick && pendingClick.req === v.req) return; // egen forespørsel – knappen var ikke her
-    const entry = maps.hnOut.button;
-    if (!entry || entry.key !== F.frameKey()) return;
-    if (!(await clickButtonHere(entry))) return; // en annen frame med samme adresse kan ha den
-    F.set({ hnClick: { req: v.req, ok: true } });
   }
 
   /* ---------------- henting på tvers av frames ---------------- */
@@ -430,159 +267,21 @@
     await F.set({ dialogExtract: { req: v.req, text: r.text, error: r.error } });
   }
 
-  /* ---------------- verktøylinje ---------------- */
-  let bar = null;
-  let panel = null; // prøvesvar-panel
-  let barMode = null;         // "svar" | "utgaaende" | null
-  let barKind = null;         // koblingstype (nøkkel i KINDS) linjen gjelder
-  let renderedKey = "";       // modus + qb-versjon linjen sist ble bygget for
-  let anchorEl = null;
+  /* ---------------- generering og utfylling (framen som eier feltene) ---------------- */
   let generating = false;
-  let lastJournal = "";
 
-  const VISIBLE_QB = 3; // antall hurtigknapper som vises direkte
-
-  function qbForView(view) {
-    return quickButtons.filter((b) => b.view === view || b.view === "begge");
-  }
-
-  function el(tag, cls, text) {
-    const n = document.createElement(tag);
-    if (cls) n.className = cls;
-    if (text != null) n.textContent = text;
-    return n;
-  }
-
-  function renderBar(mode) {
-    if (!bar) {
-      bar = el("div", "flk-ai-bar");
-      bar.id = "flk-ai-bar";
-      bar.style.display = "none";
-      document.body.appendChild(bar);
-    }
-    const prevStikkord = bar.querySelector("#flk-ai-stikkord");
-    const keepVal = prevStikkord ? prevStikkord.value : "";
-    bar.textContent = "";
-
-    const input = el("input", "flk-ai-input");
-    input.id = "flk-ai-stikkord";
-    input.type = "text";
-    input.placeholder = mode === "utgaaende"
-      ? "Stikkord (feks «prøvesvar, alt fint»)"
-      : "Stikkord (feks «resept sendt, kort»)";
-    input.title = "Stikkord og føring til KI-en – kan stå tomt";
-    input.value = keepVal;
-    input.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") { e.preventDefault(); onGenerate(); }
-      e.stopPropagation(); // ikke la PasientSky-snarveier (eller hotstrings) fange feltet
-    });
-    bar.appendChild(input);
-
-    const gen = el("button", "flk-ai-btn flk-ai-primary", mode === "utgaaende" ? "✨ Generer melding" : "✨ Generer svar");
-    gen.type = "button";
-    gen.id = "flk-ai-generate";
-    gen.addEventListener("click", () => onGenerate());
-    bar.appendChild(gen);
-
-    // hurtigknapper for denne visningen
-    const btns = qbForView(mode);
-    const visible = btns.slice(0, VISIBLE_QB);
-    const overflow = btns.slice(VISIBLE_QB);
-    for (const b of visible) bar.appendChild(makeQbButton(b));
-    if (overflow.length) {
-      const more = el("button", "flk-ai-btn", "⋯");
-      more.type = "button";
-      more.title = "Flere hurtigknapper";
-      const menu = el("div", "flk-ai-menu");
-      menu.style.display = "none";
-      for (const b of overflow) {
-        const item = makeQbButton(b);
-        item.classList.add("flk-ai-menuitem");
-        menu.appendChild(item);
+  function sendToBackground(msg) {
+    return new Promise((resolve, reject) => {
+      try {
+        chrome.runtime.sendMessage(msg, (resp) => {
+          const err = chrome.runtime && chrome.runtime.lastError;
+          if (err) reject(new Error(err.message));
+          else resolve(resp);
+        });
+      } catch (e) {
+        reject(new Error("Får ikke kontakt med utvidelsen i denne rammen."));
       }
-      more.addEventListener("click", (e) => {
-        e.stopPropagation();
-        menu.style.display = menu.style.display === "none" ? "" : "none";
-      });
-      bar.appendChild(more);
-      bar.appendChild(menu);
-    }
-
-    if (mode === "utgaaende") {
-      const pr = el("button", "flk-ai-btn", "🧪 Prøvesvar");
-      pr.type = "button";
-      pr.title = "Lim inn prøvesvar/røntgensvar og få melding + journalnotat";
-      pr.addEventListener("click", (e) => { e.stopPropagation(); togglePanel(); });
-      bar.appendChild(pr);
-    }
-
-    const copyBtn = el("button", "flk-ai-btn", "📋 Kopier notat");
-    copyBtn.type = "button";
-    copyBtn.id = "flk-ai-copy";
-    copyBtn.style.display = "none";
-    copyBtn.title = "Kopier journalnotatet til utklippstavlen";
-    copyBtn.addEventListener("click", onCopyJournal);
-    bar.appendChild(copyBtn);
-  }
-
-  function makeQbButton(b) {
-    const btn = el("button", "flk-ai-btn flk-ai-qb", (b.type === "ki" ? "✨ " : "") + b.label);
-    btn.type = "button";
-    btn.title = b.type === "ki" ? "KI-stikkord: " + (b.tekst || "") : "Fast mal settes inn umiddelbart";
-    btn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      if (b.type === "ki") onGenerate({ stikkord: b.tekst || b.label, btnEl: btn });
-      else applyMal(b);
     });
-    return btn;
-  }
-
-  /* ---------------- prøvesvar-panel ---------------- */
-  function togglePanel() {
-    if (panel && panel.style.display !== "none") { panel.style.display = "none"; return; }
-    if (!panel) {
-      panel = el("div", "flk-ai-panel");
-      const title = el("div", "flk-ai-panel-title", "Lim inn prøvesvar / røntgensvar");
-      const hint = el("div", "flk-ai-panel-hint",
-        "Fødselsnummer fjernes automatisk før sending. Unngå å ta med pasientens navn.");
-      const ta = el("textarea", "flk-ai-textarea");
-      ta.placeholder = "Lim inn her (Ctrl+V) …";
-      ta.addEventListener("keydown", (e) => e.stopPropagation());
-      const row = el("div", "flk-ai-panel-row");
-      const go = el("button", "flk-ai-btn flk-ai-primary", "✨ Generer melding");
-      go.type = "button";
-      go.addEventListener("click", () => {
-        const mat = ta.value.trim();
-        if (!mat) { F.toast("Lim inn prøvesvaret først.", "error"); return; }
-        panel.style.display = "none";
-        onGenerate({ materiale: mat });
-      });
-      const cancel = el("button", "flk-ai-btn", "Avbryt");
-      cancel.type = "button";
-      cancel.addEventListener("click", () => { panel.style.display = "none"; });
-      row.appendChild(go);
-      row.appendChild(cancel);
-      panel.appendChild(title);
-      panel.appendChild(hint);
-      panel.appendChild(ta);
-      panel.appendChild(row);
-      panel.addEventListener("click", (e) => e.stopPropagation());
-      document.body.appendChild(panel);
-    }
-    panel.style.display = "";
-    positionPanel();
-    const ta = panel.querySelector("textarea");
-    ta.value = "";
-    ta.focus();
-  }
-
-  function positionPanel() {
-    if (!panel || panel.style.display === "none" || !bar) return;
-    const r = bar.getBoundingClientRect();
-    let top = r.top - (panel.offsetHeight || 220) - 8;
-    if (top < 4) top = r.bottom + 8;
-    panel.style.left = Math.max(4, Math.round(r.left)) + "px";
-    panel.style.top = Math.round(top) + "px";
   }
 
   // Fjern fødselsnummer o.l. før tekst sendes ut av maskinen.
@@ -592,19 +291,365 @@
       .replace(/\b\d{11}\b/g, "[fnr fjernet]");
   }
 
-  /* ---------------- posisjonering ---------------- */
-  function positionBar() {
-    if (!bar || bar.style.display === "none" || !anchorEl) return;
-    const r = anchorEl.getBoundingClientRect();
-    if (r.width === 0 && r.height === 0) { bar.style.display = "none"; return; }
-    const bh = bar.offsetHeight || 40;
-    let top = r.top - bh - 6;
-    if (top < 4) top = r.bottom + 6; // ikke plass over feltet → legg under
-    bar.style.left = Math.max(4, Math.round(r.left)) + "px";
-    bar.style.top = Math.round(top) + "px";
-    positionPanel();
+  // Fyll feltene for en koblingstype: emne + tekst (utgående) eller svarfelt.
+  function fillFields(kindName, emne, tekst) {
+    const kind = KINDS[kindName];
+    const map = maps[kindName];
+    if (kind.mode === "utgaaende") {
+      const subjEl = ownedEl(map.subject);
+      const bodyEl = ownedEl(map.body);
+      if (!bodyEl) throw new Error("Fant ikke tekstfeltet – koble " + kind.label + " på nytt.");
+      if (subjEl && emne) F.fillField(subjEl, emne);
+      F.fillField(bodyEl, tekst);
+    } else {
+      const replyEl = ownedEl(map.reply);
+      if (!replyEl) throw new Error("Fant ikke svarfeltet – koble " + kind.label + " på nytt.");
+      F.fillField(replyEl, tekst);
+    }
   }
 
+  // Resultat: { ok, journal } eller { ok: false, error }. Ingen UI her –
+  // linjen kan ligge i en annen frame.
+  async function runGenerate(kindName, opts) {
+    if (!kindName || !KINDS[kindName]) return { ok: false, error: "Fant ikke meldingsfeltene." };
+    if (generating) return { ok: false, error: "En generering pågår allerede." };
+    generating = true;
+    try {
+      let payload;
+      if (KINDS[kindName].mode === "utgaaende") {
+        payload = {
+          action: "flkGenerate",
+          mode: "utgaaende",
+          stikkord: opts.stikkord || "",
+          materiale: opts.materiale ? scrubMateriale(opts.materiale) : ""
+        };
+      } else {
+        const melding = await getPatientMessage(kindName);
+        payload = { action: "flkGenerate", mode: "svar", stikkord: opts.stikkord || "", melding };
+      }
+      const resp = await sendToBackground(payload);
+      if (!resp || !resp.ok) throw new Error((resp && resp.error) || "Ukjent feil ved generering.");
+      fillFields(kindName, resp.emne, resp.svar);
+      return { ok: true, journal: resp.journalnotat || "" };
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e) };
+    } finally {
+      generating = false;
+    }
+  }
+
+  function runMal(kindName, b) {
+    if (!kindName || !KINDS[kindName]) return { ok: false, error: "Fant ikke meldingsfeltene." };
+    if (generating) return { ok: false, error: "En generering pågår allerede." };
+    try {
+      fillFields(kindName, b.emne, b.tekst || "");
+      return { ok: true, journal: b.notat || "", mal: true };
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e) };
+    }
+  }
+
+  /* ---------------- KI-linjen (UI) ----------------
+   * backend.generate(opts) / backend.mal(b) returnerer Promise<resultat>,
+   * enten lokalt (runGenerate/runMal) eller via toppvinduet → eierframen.
+   * show(mode, getRect): getRect gir feltets posisjon i DENNE framens
+   * koordinater (null = skjul). */
+  const VISIBLE_QB = 3; // antall hurtigknapper som vises direkte
+
+  function el(tag, cls, text) {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  }
+
+  async function tryCopy(text) {
+    if (!text) return true;
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch (e) {}
+    try {
+      const prev = document.activeElement;
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      const ok = document.execCommand("copy");
+      ta.remove();
+      if (prev && prev.focus) { try { prev.focus(); } catch (e) {} }
+      return ok;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function createBarUI(backend) {
+    let bar = null;
+    let panel = null;          // prøvesvar-panel
+    let mode = null;           // "svar" | "utgaaende"
+    let renderedKey = "";      // modus + qb-versjon linjen sist ble bygget for
+    let getRect = null;
+    let busy = false;
+    let lastJournal = "";
+    let copyPending = false;   // notatet kunne ikke kopieres automatisk
+
+    function qbForView(view) {
+      return quickButtons.filter((b) => b.view === view || b.view === "begge");
+    }
+
+    function render() {
+      if (!bar) {
+        bar = el("div", "flk-ai-bar");
+        bar.id = "flk-ai-bar";
+        bar.style.display = "none";
+        document.body.appendChild(bar);
+        // lukk ⋯-menyen ved klikk utenfor
+        document.addEventListener("click", () => {
+          for (const m of bar.querySelectorAll(".flk-ai-menu")) m.style.display = "none";
+        });
+      }
+      const prevStikkord = bar.querySelector("#flk-ai-stikkord");
+      const keepVal = prevStikkord ? prevStikkord.value : "";
+      bar.textContent = "";
+
+      const input = el("input", "flk-ai-input");
+      input.id = "flk-ai-stikkord";
+      input.type = "text";
+      input.placeholder = mode === "utgaaende"
+        ? "Stikkord (feks «prøvesvar, alt fint»)"
+        : "Stikkord (feks «resept sendt, kort»)";
+      input.title = "Stikkord og føring til KI-en – kan stå tomt";
+      input.value = keepVal;
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); onGenerate(); }
+        e.stopPropagation(); // ikke la PasientSky-snarveier (eller hotstrings) fange feltet
+      });
+      bar.appendChild(input);
+
+      const gen = el("button", "flk-ai-btn flk-ai-primary", mode === "utgaaende" ? "✨ Generer melding" : "✨ Generer svar");
+      gen.type = "button";
+      gen.id = "flk-ai-generate";
+      gen.addEventListener("click", () => onGenerate());
+      bar.appendChild(gen);
+
+      // hurtigknapper for denne visningen
+      const btns = qbForView(mode);
+      const visible = btns.slice(0, VISIBLE_QB);
+      const overflow = btns.slice(VISIBLE_QB);
+      for (const b of visible) bar.appendChild(makeQbButton(b));
+      if (overflow.length) {
+        const more = el("button", "flk-ai-btn", "⋯");
+        more.type = "button";
+        more.title = "Flere hurtigknapper";
+        const menu = el("div", "flk-ai-menu");
+        menu.style.display = "none";
+        for (const b of overflow) {
+          const item = makeQbButton(b);
+          item.classList.add("flk-ai-menuitem");
+          menu.appendChild(item);
+        }
+        more.addEventListener("click", (e) => {
+          e.stopPropagation();
+          menu.style.display = menu.style.display === "none" ? "" : "none";
+        });
+        bar.appendChild(more);
+        bar.appendChild(menu);
+      }
+
+      if (mode === "utgaaende") {
+        const pr = el("button", "flk-ai-btn", "🧪 Prøvesvar");
+        pr.type = "button";
+        pr.title = "Lim inn prøvesvar/røntgensvar og få melding + journalnotat";
+        pr.addEventListener("click", (e) => { e.stopPropagation(); togglePanel(); });
+        bar.appendChild(pr);
+      }
+
+      const copyBtn = el("button", "flk-ai-btn", "📋 Kopier notat");
+      copyBtn.type = "button";
+      copyBtn.id = "flk-ai-copy";
+      copyBtn.style.display = lastJournal && copyPending ? "" : "none";
+      copyBtn.title = "Kopier journalnotatet til utklippstavlen";
+      copyBtn.addEventListener("click", onCopyJournal);
+      bar.appendChild(copyBtn);
+    }
+
+    function makeQbButton(b) {
+      const btn = el("button", "flk-ai-btn flk-ai-qb", (b.type === "ki" ? "✨ " : "") + b.label);
+      btn.type = "button";
+      btn.title = b.type === "ki" ? "KI-stikkord: " + (b.tekst || "") : "Fast mal settes inn umiddelbart";
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (b.type === "ki") onGenerate({ stikkord: b.tekst || b.label, btnEl: btn });
+        else onMal(b);
+      });
+      return btn;
+    }
+
+    /* ---- prøvesvar-panel ---- */
+    function togglePanel() {
+      if (panel && panel.style.display !== "none") { panel.style.display = "none"; return; }
+      if (!panel) {
+        panel = el("div", "flk-ai-panel");
+        const title = el("div", "flk-ai-panel-title", "Lim inn prøvesvar / røntgensvar");
+        const hint = el("div", "flk-ai-panel-hint",
+          "Fødselsnummer fjernes automatisk før sending. Unngå å ta med pasientens navn.");
+        const ta = el("textarea", "flk-ai-textarea");
+        ta.placeholder = "Lim inn her (Ctrl+V) …";
+        ta.addEventListener("keydown", (e) => e.stopPropagation());
+        const row = el("div", "flk-ai-panel-row");
+        const go = el("button", "flk-ai-btn flk-ai-primary", "✨ Generer melding");
+        go.type = "button";
+        go.addEventListener("click", () => {
+          const mat = ta.value.trim();
+          if (!mat) { F.toast("Lim inn prøvesvaret først.", "error"); return; }
+          panel.style.display = "none";
+          onGenerate({ materiale: mat });
+        });
+        const cancel = el("button", "flk-ai-btn", "Avbryt");
+        cancel.type = "button";
+        cancel.addEventListener("click", () => { panel.style.display = "none"; });
+        row.appendChild(go);
+        row.appendChild(cancel);
+        panel.appendChild(title);
+        panel.appendChild(hint);
+        panel.appendChild(ta);
+        panel.appendChild(row);
+        panel.addEventListener("click", (e) => e.stopPropagation());
+        document.body.appendChild(panel);
+      }
+      panel.style.display = "";
+      positionPanel();
+      const ta = panel.querySelector("textarea");
+      ta.value = "";
+      ta.focus();
+    }
+
+    function positionPanel() {
+      if (!panel || panel.style.display === "none" || !bar) return;
+      const r = bar.getBoundingClientRect();
+      let top = r.top - (panel.offsetHeight || 220) - 8;
+      if (top < 4) top = r.bottom + 8;
+      panel.style.left = Math.max(4, Math.min(Math.round(r.left), window.innerWidth - (panel.offsetWidth || 420) - 4)) + "px";
+      panel.style.top = Math.round(top) + "px";
+    }
+
+    /* ---- posisjonering ---- */
+    function reposition() {
+      if (!bar || !mode || !getRect) return;
+      const r = getRect();
+      if (!r || (r.width === 0 && r.height === 0) || r.bottom < 0 || r.top > window.innerHeight) {
+        bar.style.display = "none";
+        if (panel) panel.style.display = "none";
+        return;
+      }
+      if (bar.style.display === "none") bar.style.display = "";
+      const bh = bar.offsetHeight || 40;
+      const bw = bar.offsetWidth || 600;
+      let top = r.top - bh - 6;
+      if (top < 4) top = r.bottom + 6;                        // ikke plass over feltet → under
+      if (top + bh > window.innerHeight - 4) top = Math.max(4, window.innerHeight - bh - 4);
+      const left = Math.max(4, Math.min(Math.round(r.left), window.innerWidth - bw - 4));
+      bar.style.left = left + "px";
+      bar.style.top = Math.round(top) + "px";
+      positionPanel();
+    }
+
+    function show(newMode, rectFn) {
+      getRect = rectFn;
+      if (!busy) {
+        mode = newMode;
+        const key = newMode + "|" + qbVersion;
+        if (key !== renderedKey) { render(); renderedKey = key; }
+      }
+      reposition();
+    }
+
+    function hide() {
+      if (busy) return; // behold linjen til genereringen er ferdig
+      mode = null;
+      getRect = null;
+      if (bar) bar.style.display = "none";
+      if (panel) panel.style.display = "none";
+    }
+
+    /* ---- handlinger ---- */
+    function setBusy(b, btnEl) {
+      busy = b;
+      if (!bar) return;
+      for (const x of bar.querySelectorAll("button")) x.disabled = b;
+      const gen = bar.querySelector("#flk-ai-generate");
+      if (gen) gen.textContent = b && !btnEl
+        ? "Genererer…"
+        : (mode === "utgaaende" ? "✨ Generer melding" : "✨ Generer svar");
+      if (btnEl && b) btnEl.textContent = "…";
+    }
+
+    async function deliverJournal(notat) {
+      lastJournal = notat || "";
+      const copied = await tryCopy(lastJournal);
+      copyPending = !copied;
+      const copyBtn = bar && bar.querySelector("#flk-ai-copy");
+      if (copyBtn) copyBtn.style.display = copied ? "none" : "";
+      return copied;
+    }
+
+    async function onGenerate(opts) {
+      opts = opts || {};
+      if (busy || !mode) return;
+      setBusy(true, opts.btnEl);
+      try {
+        const stikkord = opts.stikkord != null
+          ? opts.stikkord
+          : (bar.querySelector("#flk-ai-stikkord") || {}).value || "";
+        const res = await backend.generate({ stikkord, materiale: opts.materiale || "" });
+        if (!res || !res.ok) throw new Error((res && res.error) || "Ukjent feil ved generering.");
+        const copied = await deliverJournal(res.journal);
+        F.toast(copied
+          ? "Tekst lagt inn. Journalnotatet ligger på utklippstavlen. ✔"
+          : "Tekst lagt inn. Trykk «Kopier notat» for journalnotatet.", "ok");
+      } catch (e) {
+        F.toast("Generering feilet: " + (e && e.message ? e.message : e), "error");
+      } finally {
+        setBusy(false, opts.btnEl);
+        renderedKey = ""; // tegn linjen på nytt (rydder knappetekster)
+        if (mode) { render(); renderedKey = mode + "|" + qbVersion; reposition(); }
+      }
+    }
+
+    async function onMal(b) {
+      if (busy || !mode) return;
+      try {
+        const res = await backend.mal({ label: b.label, emne: b.emne || "", tekst: b.tekst || "", notat: b.notat || "" });
+        if (!res || !res.ok) throw new Error((res && res.error) || "Ukjent feil.");
+        const copied = await deliverJournal(res.journal);
+        F.toast(copied
+          ? (res.journal ? "Mal lagt inn. Journalnotatet ligger på utklippstavlen. ✔" : "Mal lagt inn. ✔")
+          : "Mal lagt inn. Trykk «Kopier notat» for journalnotatet.", "ok");
+      } catch (e) {
+        F.toast("Feil: " + (e && e.message ? e.message : e), "error");
+      }
+    }
+
+    async function onCopyJournal() {
+      const ok = await tryCopy(lastJournal);
+      if (ok) {
+        copyPending = false;
+        const copyBtn = bar.querySelector("#flk-ai-copy");
+        if (copyBtn) copyBtn.style.display = "none";
+        F.toast("Journalnotat kopiert. ✔", "ok");
+      } else {
+        F.toast("Kopiering feilet – marker og kopier manuelt.", "error");
+      }
+    }
+
+    return { show, hide, reposition, isBusy: () => busy, rerender: () => { renderedKey = ""; } };
+  }
+
+  /* ---------------- gjenkjenning av visning ---------------- */
   // Hvilken koblingstype passer visningen i denne framen? Utgående har forrang
   // (der finnes både emne- og tekstfelt). Treffer flere svar-koblinger samme
   // svarfelt, velges den der pasientmeldingen faktisk finnes.
@@ -628,171 +673,152 @@
     return best;
   }
 
-  function tick() {
-    const found = detect();
+  /* ---------------- toppvinduet: linje for felt i en iframe ---------------- */
+  // remote: { iframe, win, token, mode, rect, seen } — siste rapport fra en
+  // direkte under-iframe som har feltene.
+  let remote = null;
+  const remoteReqs = new Map();
 
-    if (!found) {
-      barMode = null;
-      barKind = null;
-      anchorEl = null;
-      if (bar) bar.style.display = "none";
-      if (panel) panel.style.display = "none";
-      return;
+  function iframeFor(win) {
+    for (const f of document.querySelectorAll("iframe")) {
+      try { if (f.contentWindow === win) return f; } catch (e) {}
     }
-
-    const mode = KINDS[found.kind].mode;
-    if (!generating) barKind = found.kind; // ikke bytt type midt i en generering
-    anchorEl = found.anchor;
-    const key = mode + "|" + qbVersion;
-    if (key !== renderedKey) {
-      renderBar(mode);
-      renderedKey = key;
-      barMode = mode;
-    }
-    if (bar.style.display === "none") bar.style.display = "";
-    positionBar();
+    return null;
   }
 
-  /* ---------------- generering ---------------- */
-  function sendToBackground(msg) {
-    return new Promise((resolve, reject) => {
+  function remoteRect() {
+    if (!remote) return null;
+    const f = remote.iframe.getBoundingClientRect();
+    if (f.width === 0 || f.height === 0) return null;
+    const r = remote.rect;
+    if (r.top + r.height < 0 || r.top > f.height || r.left + r.width < 0 || r.left > f.width) return null;
+    const x = f.left + remote.iframe.clientLeft + r.left;
+    const y = f.top + remote.iframe.clientTop + r.top;
+    return { left: x, top: y, right: x + r.width, bottom: y + r.height, width: r.width, height: r.height };
+  }
+
+  function remoteCall(cmd, opts) {
+    return new Promise((resolve) => {
+      if (!remote) { resolve({ ok: false, error: "Mistet kontakten med meldingsvinduet." }); return; }
+      const req = rid();
+      const timer = setTimeout(() => {
+        remoteReqs.delete(req);
+        resolve({ ok: false, error: "Fikk ikke svar fra meldingsvinduet." });
+      }, 120000);
+      remoteReqs.set(req, (r) => { clearTimeout(timer); resolve(r); });
       try {
-        chrome.runtime.sendMessage(msg, (resp) => {
-          const err = chrome.runtime && chrome.runtime.lastError;
-          if (err) reject(new Error(err.message));
-          else resolve(resp);
-        });
+        remote.win.postMessage({ __flk: "cmd", token: remote.token, req, cmd, opts }, "*");
       } catch (e) {
-        reject(new Error("Får ikke kontakt med utvidelsen i denne rammen."));
+        clearTimeout(timer);
+        remoteReqs.delete(req);
+        resolve({ ok: false, error: "Får ikke kontakt med meldingsvinduet." });
       }
     });
   }
 
-  async function tryCopy(text) {
-    if (!text) return true;
-    try {
-      await navigator.clipboard.writeText(text);
-      return true;
-    } catch (e) {}
-    try {
-      const ta = document.createElement("textarea");
-      ta.value = text;
-      ta.style.position = "fixed";
-      ta.style.opacity = "0";
-      document.body.appendChild(ta);
-      ta.focus();
-      ta.select();
-      const ok = document.execCommand("copy");
-      ta.remove();
-      return ok;
-    } catch (e) {
-      return false;
+  /* ---------------- under-iframe: rapporter til toppvinduet ---------------- */
+  const myToken = rid();
+  let ackAt = 0;         // sist toppvinduet bekreftet at det tegner linjen
+  let reportSince = 0;   // når vi begynte å rapportere denne visningen
+  let reported = false;
+
+  function report(found) {
+    if (!isDirectChild) return;
+    if (!found && !reported) return;
+    const msg = { __flk: "bar", token: myToken, mode: null };
+    if (found) {
+      const r = found.anchor.getBoundingClientRect();
+      msg.mode = KINDS[found.kind].mode;
+      msg.rect = { left: r.left, top: r.top, width: r.width, height: r.height };
     }
+    reported = !!found;
+    try { window.parent.postMessage(msg, "*"); } catch (e) {}
   }
+  const remoteOk = () => isDirectChild && Date.now() - ackAt < 3000;
 
-  async function deliverJournal(notat) {
-    lastJournal = notat || "";
-    const copyBtn = bar && bar.querySelector("#flk-ai-copy");
-    const copied = await tryCopy(lastJournal);
-    if (copyBtn) copyBtn.style.display = copied ? "none" : "";
-    return copied;
-  }
+  window.addEventListener("message", async (e) => {
+    const d = e.data;
+    if (!d || typeof d !== "object" || typeof d.__flk !== "string") return;
 
-  function setBusy(busy, btnEl) {
-    generating = busy;
-    if (!bar) return;
-    for (const b of bar.querySelectorAll("button")) b.disabled = busy;
-    const gen = bar.querySelector("#flk-ai-generate");
-    if (gen) gen.textContent = busy && !btnEl
-      ? "Genererer…"
-      : (barMode === "utgaaende" ? "✨ Generer melding" : "✨ Generer svar");
-    if (btnEl) btnEl.textContent = busy ? "…" : btnEl.textContent;
-  }
-
-
-  // Fyll feltene for aktiv koblingstype: emne + tekst (utgående) eller svarfelt.
-  function fillFields(kindName, emne, tekst) {
-    const kind = KINDS[kindName];
-    const map = maps[kindName];
-    if (kind.mode === "utgaaende") {
-      const subjEl = ownedEl(map.subject);
-      const bodyEl = ownedEl(map.body);
-      if (!bodyEl) throw new Error("Fant ikke tekstfeltet – koble " + kind.label + " på nytt.");
-      if (subjEl && emne) F.fillField(subjEl, emne);
-      F.fillField(bodyEl, tekst);
-    } else {
-      const replyEl = ownedEl(map.reply);
-      if (!replyEl) throw new Error("Fant ikke svarfeltet – koble " + kind.label + " på nytt.");
-      F.fillField(replyEl, tekst);
-    }
-  }
-
-  async function onGenerate(opts) {
-    opts = opts || {};
-    if (generating || !barMode || !barKind) return;
-    const mode = barMode;
-    const kindName = barKind;
-    setBusy(true, opts.btnEl);
-    try {
-      const stikkord = opts.stikkord != null
-        ? opts.stikkord
-        : (bar.querySelector("#flk-ai-stikkord") || {}).value || "";
-
-      let payload;
-      if (mode === "utgaaende") {
-        payload = {
-          action: "flkGenerate",
-          mode: "utgaaende",
-          stikkord,
-          materiale: opts.materiale ? scrubMateriale(opts.materiale) : ""
-        };
-      } else {
-        const melding = await getPatientMessage(kindName);
-        payload = { action: "flkGenerate", mode: "svar", stikkord, melding };
+    // --- i under-iframen: svar og kommandoer fra toppvinduet ---
+    if (isDirectChild && e.source === window.parent && d.token === myToken) {
+      if (d.__flk === "ack") { ackAt = Date.now(); return; }
+      if (d.__flk === "cmd") {
+        let res;
+        if (d.cmd === "generate") res = await runGenerate(ownerKind, d.opts || {});
+        else if (d.cmd === "mal") res = runMal(ownerKind, (d.opts && d.opts.b) || {});
+        else res = { ok: false, error: "Ukjent kommando." };
+        try { window.parent.postMessage(Object.assign({ __flk: "res", token: myToken, req: d.req }, res), "*"); } catch (err) {}
       }
-
-      const resp = await sendToBackground(payload);
-      if (!resp || !resp.ok) throw new Error((resp && resp.error) || "Ukjent feil ved generering.");
-
-      fillFields(kindName, resp.emne, resp.svar);
-
-      const copied = await deliverJournal(resp.journalnotat);
-      F.toast(copied
-        ? "Tekst lagt inn. Journalnotatet ligger på utklippstavlen. ✔"
-        : "Tekst lagt inn. Trykk «Kopier notat» for journalnotatet.", "ok");
-    } catch (e) {
-      F.toast("Generering feilet: " + (e && e.message ? e.message : e), "error");
-    } finally {
-      setBusy(false, opts.btnEl);
-      renderedKey = ""; // tegn linjen på nytt (rydder knappetekster)
-      tick();
+      return;
     }
+
+    // --- i toppvinduet: rapporter og svar fra under-iframer ---
+    if (!isTop) return;
+    if (d.__flk === "res") {
+      const cb = remoteReqs.get(d.req);
+      if (cb) { remoteReqs.delete(d.req); cb(d); }
+      return;
+    }
+    if (d.__flk !== "bar") return;
+    const iframe = iframeFor(e.source);
+    if (!iframe) return;
+    try { e.source.postMessage({ __flk: "ack", token: d.token }, "*"); } catch (err) {}
+    if (!d.mode) {
+      if (remote && remote.token === d.token) remote = null;
+      topTick();
+      return;
+    }
+    // Hold på nåværende vindu så lenge det er aktivt (unngå flimring mellom to)
+    if (remote && remote.token !== d.token && Date.now() - remote.seen < 2000 && remote.iframe.isConnected) return;
+    remote = { iframe, win: e.source, token: d.token, mode: d.mode, rect: d.rect, seen: Date.now() };
+    topTick();
+  });
+
+  /* ---------------- tick ---------------- */
+  let ownerKind = null;   // koblingstypen feltene i denne framen tilhører
+  let ownerAnchor = null;
+  let source = "local";   // toppvinduet: "local" (egne felt) eller "remote"
+  const ui = createBarUI({
+    generate: (opts) => source === "remote" ? remoteCall("generate", opts) : runGenerate(ownerKind, opts),
+    mal: (b) => source === "remote" ? remoteCall("mal", { b }) : Promise.resolve(runMal(ownerKind, b))
+  });
+
+  function localRect() {
+    return ownerAnchor && ownerAnchor.isConnected ? ownerAnchor.getBoundingClientRect() : null;
   }
 
-  async function applyMal(b) {
-    if (generating || !barMode || !barKind) return;
-    try {
-      fillFields(barKind, b.emne, b.tekst || "");
-      const copied = await deliverJournal(b.notat || "");
-      F.toast(copied
-        ? (b.notat ? "Mal lagt inn. Journalnotatet ligger på utklippstavlen. ✔" : "Mal lagt inn. ✔")
-        : "Mal lagt inn. Trykk «Kopier notat» for journalnotatet.", "ok");
-    } catch (e) {
-      F.toast("Feil: " + (e && e.message ? e.message : e), "error");
+  function tick() {
+    const found = detect();
+    if (!found) {
+      if (!generating) { ownerKind = null; ownerAnchor = null; }
+      report(null);
+      reportSince = 0;
+      if (isTop) topTick(); else ui.hide();
+      return;
     }
+    if (!generating) ownerKind = found.kind; // ikke bytt type midt i en generering
+    ownerAnchor = found.anchor;
+    const mode = KINDS[found.kind].mode;
+
+    if (isDirectChild) {
+      report(found);
+      if (!reportSince) reportSince = Date.now();
+      if (remoteOk()) { ui.hide(); return; }
+      if (Date.now() - reportSince < 1500) return; // venter på svar fra toppvinduet
+    }
+    if (isTop) source = "local";
+    ui.show(mode, localRect);
   }
 
-  async function onCopyJournal() {
-    const ok = await tryCopy(lastJournal);
-    if (ok) {
-      const copyBtn = bar.querySelector("#flk-ai-copy");
-      if (copyBtn) copyBtn.style.display = "none";
-      F.toast("Journalnotat kopiert. ✔", "ok");
-    } else {
-      F.toast("Kopiering feilet – marker og kopier manuelt.", "error");
-    }
+  // Toppvinduet uten egne felt: tegn linjen for en under-iframe.
+  function topTick() {
+    if (!isTop || ownerKind) return;
+    if (remote && (!remote.iframe.isConnected || Date.now() - remote.seen > 2500)) remote = null;
+    if (!remote) { ui.hide(); return; }
+    source = "remote";
+    ui.show(remote.mode, remoteRect);
   }
-
 
   /* ---------------- storage-endringer ---------------- */
   F.onChanged((changes, _area) => {
@@ -802,9 +828,8 @@
       if (changes[k.mapKey]) maps[n] = changes[k.mapKey].newValue || {};
     }
     if (changes.dialogExtract) handleExtractChange(changes.dialogExtract.newValue);
-    if (changes.hnClick) handleClickRequest(changes.hnClick.newValue);
     for (const k of Object.keys(changes)) {
-      if (k.indexOf("qb.") === 0) { loadQuickButtons(); break; }
+      if (k.indexOf("qb.") === 0) { loadQuickButtons(); ui.rerender(); break; }
     }
   });
 
@@ -828,12 +853,16 @@
   } catch (e) {}
 
   /* ---------------- oppstart ---------------- */
-  // lukk ⋯-menyen ved klikk utenfor (én global lytter, uansett re-rendering)
-  document.addEventListener("click", () => {
-    if (!bar) return;
-    for (const m of bar.querySelectorAll(".flk-ai-menu")) m.style.display = "none";
-  });
-  setInterval(tick, 900); // SPA-robusthet: dialoger åpnes/lukkes dynamisk
-  window.addEventListener("scroll", positionBar, true);
-  window.addEventListener("resize", positionBar);
+  setInterval(tick, 500);              // SPA-robusthet: vinduer åpnes/lukkes dynamisk
+  if (isTop) setInterval(topTick, 250); // følg vinduer som flyttes/dras
+  let scrollQueued = false;
+  function onScroll() {
+    ui.reposition();
+    if (isDirectChild && reported && !scrollQueued) {
+      scrollQueued = true;
+      setTimeout(() => { scrollQueued = false; tick(); }, 60);
+    }
+  }
+  window.addEventListener("scroll", onScroll, true);
+  window.addEventListener("resize", onScroll);
 })();

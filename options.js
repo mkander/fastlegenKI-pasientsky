@@ -278,8 +278,8 @@
   }
 
   async function renderDialog() {
-    const { dialogMap, outgoingMap, hnOutMap, hnReplyMap } =
-      await sGet(["dialogMap", "outgoingMap", "hnOutMap", "hnReplyMap"]);
+    const { dialogMap, outgoingMap, hnOutMap, hnReplyMap, patientField } =
+      await sGet(["dialogMap", "outgoingMap", "hnOutMap", "hnReplyMap", "patientField"]);
     const dm = dialogMap || {};
     const om = outgoingMap || {};
     const ho = hnOutMap || {};
@@ -294,11 +294,13 @@
       line("Dialog – svarfelt", dm.reply) + "\n" +
       line("Ny melding – emnefelt", om.subject) + "\n" +
       line("Ny melding – tekstfelt", om.body) + "\n" +
-      line("eKontakt – knapp (Alt+E)", ho.button) + "\n" +
       line("eKontakt – emnefelt", ho.subject) + "\n" +
       line("eKontakt – tekstfelt", ho.body) + "\n" +
       line("Helsenorge-svar – pasientmelding", hr.message) + "\n" +
-      line("Helsenorge-svar – svarfelt", hr.reply);
+      line("Helsenorge-svar – svarfelt", hr.reply) + "\n" +
+      (patientField && patientField.selector
+        ? "Pasientfelt øverst (Alt+E): [" + patientField.selector + "]"
+        : "Pasientfelt øverst (Alt+E): (ikke koblet – eKontakt åpnes uten pasient)");
   }
 
   /* ==================== last inn / lagre ==================== */
@@ -359,7 +361,7 @@
 
   /* ==================== eksport / import ==================== */
 
-  const EXPORT_KEYS = ["settings", "ai", "fieldMap", "dialogMap", "outgoingMap", "hnOutMap", "hnReplyMap", "hsDomains"];
+  const EXPORT_KEYS = ["settings", "ai", "fieldMap", "dialogMap", "outgoingMap", "hnOutMap", "hnReplyMap", "patientField", "hsDomains"];
   function exportable(k) {
     return EXPORT_KEYS.indexOf(k) !== -1 || k.indexOf("hs.") === 0 || k.indexOf("qb.") === 0;
   }
@@ -433,8 +435,8 @@
   });
   $("resetHn").addEventListener("click", async () => {
     try {
-      await sSet({ hnOutMap: {}, hnReplyMap: {} });
-      await lSet({ hnOutLearn: { active: false, step: 0 }, hnReplyLearn: { active: false, step: 0 } });
+      await sSet({ hnOutMap: {}, hnReplyMap: {}, patientField: null });
+      await lSet({ hnOutLearn: { active: false, step: 0 }, hnReplyLearn: { active: false, step: 0 }, patientFieldLearn: { active: false } });
     } catch (err) { alert("Lagring feilet: " + err.message); }
     renderDialog();
   });
@@ -442,7 +444,7 @@
   chrome.storage.onChanged.addListener((c, area) => {
     if (area !== "sync") return;
     if (c.fieldMap) renderMap();
-    if (c.dialogMap || c.outgoingMap || c.hnOutMap || c.hnReplyMap) renderDialog();
+    if (c.dialogMap || c.outgoingMap || c.hnOutMap || c.hnReplyMap || c.patientField) renderDialog();
     if (c.hsDomains) renderDomains();
   });
 
