@@ -126,11 +126,25 @@
     const t = ((el.innerText || el.textContent || "") + "").replace(/\s+/g, " ").trim();
     return t.length <= 80 ? t : "";
   }
+  // innerText kan avvike for skjulte elementer (CSS-transform av tekst o.l.)
+  function hiddenText(el) {
+    const t = ((el.textContent || "") + "").replace(/\s+/g, " ").trim();
+    return t.length <= 80 ? t : "";
+  }
 
   function captureEntry(el, part) {
     const attrs = F.captureAttrs(el);
-    if (part === "button") attrs.text = shortText(el);
-    return { key: F.frameKey(), selector: F.cssPath(el), attrs };
+    const entry = { key: F.frameKey(), selector: F.cssPath(el), attrs };
+    if (part === "button") {
+      attrs.text = shortText(el);
+      // Knappen kan ligge i en meny som bare finnes mens musa hovrer over den.
+      // Husk forfedrene, så menyen kan åpnes igjen med simulert hover.
+      entry.ancestors = [];
+      for (let n = el.parentElement; n && n !== document.body && entry.ancestors.length < 10; n = n.parentElement) {
+        entry.ancestors.push(F.cssPath(n));
+      }
+    }
+    return entry;
   }
 
   function activeLearn() {
@@ -173,7 +187,8 @@
     const map = (await F.get(kind.mapKey))[kind.mapKey] || {};
     map[part] = entry;
     await F.set({ [kind.mapKey]: map, [kind.learnKey]: done ? IDLE : { active: true, step: next } });
-    F.toast(kind.texts[next], "ok");
+    const label = part === "button" && entry.attrs.text ? " («" + entry.attrs.text + "»)" : "";
+    F.toast(kind.texts[next].replace("koblet", "koblet" + label), "ok");
   }
 
   async function toggleLearn(name) {
@@ -220,15 +235,19 @@
     return r.width > 0 && r.height > 0;
   }
 
-  // Knappen er heller ikke redigerbar. Kun entydige, synlige treff godtas;
-  // knappeteksten (f.eks. «eKontakt») er ofte det mest stabile kjennetegnet.
-  function findButtonEl(entry) {
+  // Knappen er heller ikke redigerbar. Kun entydige treff godtas; knappeteksten
+  // (f.eks. «eKontakt») er ofte det mest stabile kjennetegnet. Synlige treff
+  // foretrekkes; med allowHidden godtas også en skjult knapp (lukket meny),
+  // som kan klikkes programmatisk likevel.
+  function findButtonEl(entry, allowHidden) {
     if (!entry) return null;
     const a = entry.attrs || {};
     const esc = (s) => String(s).replace(/(["\\])/g, "\\$1");
     const uniq = (list) => {
-      const vis = Array.from(list).filter(isVisible);
-      return vis.length === 1 ? vis[0] : null;
+      const all = Array.from(list);
+      const vis = all.filter(isVisible);
+      if (vis.length === 1) return vis[0];
+      return allowHidden && vis.length === 0 && all.length === 1 ? all[0] : null;
     };
     const sels = [];
     if (a.id) sels.push("#" + CSS.escape(a.id));
@@ -238,7 +257,7 @@
       try { const el = uniq(document.querySelectorAll(sel)); if (el) return el; } catch (e) {}
     }
     if (a.text) {
-      const el = uniq(Array.from(document.querySelectorAll(CLICKABLE)).filter((n) => shortText(n) === a.text));
+      const el = uniq(Array.from(document.querySelectorAll(CLICKABLE)).filter((n) => shortText(n) === a.text || hiddenText(n) === a.text));
       if (el) return el;
     }
     if (entry.selector) {
@@ -274,16 +293,64 @@
     true
   );
 
-  function openEkontakt() {
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  function fireHover(el, type) {
+    const opts = { bubbles: type !== "mouseenter" && type !== "mouseleave", cancelable: true, view: window };
+    try {
+      el.dispatchEvent(type.indexOf("pointer") === 0 ? new PointerEvent(type, opts) : new MouseEvent(type, opts));
+    } catch (e) {}
+  }
+
+  // Simuler at musa går inn over menyen knappen ligger i: nærmeste lagrede
+  // forelder som finnes og er synlig nå (menyfeltet i menylinja).
+  function hoverAnchor(entry) {
+    for (const sel of entry.ancestors || []) {
+      try {
+        const el = document.querySelector(sel);
+        if (el && isVisible(el)) return el;
+      } catch (e) {}
+    }
+    return null;
+  }
+  function hoverChain(anchor) {
+    const chain = [];
+    for (let n = anchor; n && n !== document.documentElement; n = n.parentElement) chain.unshift(n);
+    return chain; // ytterst først, som ekte mouseenter
+  }
+
+  // Finn og klikk knappen i denne framen: synlig → skjult (lukket meny) →
+  // åpne menyen med simulert hover og vent på at knappen dukker opp.
+  async function clickButtonHere(entry) {
+    let btn = findButtonEl(entry, true);
+    if (btn) { btn.click(); return true; }
+    const anchor = hoverAnchor(entry);
+    if (!anchor) return false;
+    const chain = hoverChain(anchor);
+    fireHover(anchor, "pointerover");
+    fireHover(anchor, "mouseover");
+    for (const n of chain) { fireHover(n, "pointerenter"); fireHover(n, "mouseenter"); }
+    for (let i = 0; i < 15 && !btn; i++) {
+      await sleep(50);
+      btn = findButtonEl(entry, true);
+    }
+    if (btn) btn.click();
+    // lukk menyen igjen (som når musa går ut)
+    setTimeout(() => {
+      fireHover(anchor, "pointerout");
+      fireHover(anchor, "mouseout");
+      for (const n of chain.slice().reverse()) { fireHover(n, "pointerleave"); fireHover(n, "mouseleave"); }
+    }, 150);
+    return !!btn;
+  }
+
+  async function openEkontakt() {
     const entry = maps.hnOut.button;
     if (!entry) {
       F.toast("eKontakt-knappen er ikke koblet. Bruk popup → «Koble eKontakt – ny melding».", "error");
       return;
     }
-    if (entry.key === F.frameKey()) {
-      const btn = findButtonEl(entry);
-      if (btn) { btn.click(); return; }
-    }
+    if (entry.key === F.frameKey() && await clickButtonHere(entry)) return;
     if (pendingClick) clearTimeout(pendingClick.timer);
     const req = Date.now() + "-" + Math.random().toString(36).slice(2);
     pendingClick = {
@@ -291,12 +358,12 @@
       timer: setTimeout(() => {
         pendingClick = null;
         F.toast("Fant ikke eKontakt-knappen – er en pasient åpen? Koble eKontakt på nytt om den har flyttet seg.", "error");
-      }, 1500)
+      }, 2500)
     };
     F.set({ hnClick: { req } });
   }
 
-  function handleClickRequest(v) {
+  async function handleClickRequest(v) {
     if (!v || !v.req) return;
     if (v.ok) {
       if (pendingClick && pendingClick.req === v.req) { clearTimeout(pendingClick.timer); pendingClick = null; }
@@ -305,9 +372,7 @@
     if (pendingClick && pendingClick.req === v.req) return; // egen forespørsel – knappen var ikke her
     const entry = maps.hnOut.button;
     if (!entry || entry.key !== F.frameKey()) return;
-    const btn = findButtonEl(entry);
-    if (!btn) return; // en annen frame med samme adresse kan ha den
-    btn.click();
+    if (!(await clickButtonHere(entry))) return; // en annen frame med samme adresse kan ha den
     F.set({ hnClick: { req: v.req, ok: true } });
   }
 
