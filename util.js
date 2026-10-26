@@ -4,7 +4,7 @@
 (function () {
   "use strict";
   if (window.FLK) return; // unngå dobbel-injeksjon (PasientSky har mange frames)
-  console.log("[FLK] util.js v11 lastet i", location.href);
+  console.log("[FLK] util.js v12 lastet i", location.href);
 
   const DEFAULTS = {
     headings: ["OVERSKRIFT1", "OVERSKRIFT2", "OVERSKRIFT3", "OVERSKRIFT4"],
