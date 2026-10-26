@@ -94,6 +94,26 @@ ligger innebygd i `background.js`.
    fjernes automatisk før sending — og KI-en lager emne, melding med
    forklaring/plan og journalnotat.
 
+### eKontakt via Helsenorge
+
+Meldinger kan også sendes som eKontakt via Helsenorge. Den har egne felt, og
+kobles derfor for seg (to runder i popupen):
+
+1. **Ny melding:** popup → **«Koble eKontakt – ny melding (Helsenorge)»**.
+   Klikk først på knappen som åpner ny eKontakt (klikket slippes gjennom, så
+   vinduet åpnes som vanlig), deretter i emnefeltet og så i tekstfeltet.
+2. **Svar:** popup → **«Koble eKontakt – svar (Helsenorge)»**. Klikk på
+   pasientens melding, deretter i svarfeltet.
+
+**Alt+E** åpner ny eKontakt fra hvor som helst i PasientSky, også mens du
+skriver i et felt (som Alt+D for PasientSky-dialog, som er innebygd i
+PasientSky). Alt+E overstyrer Chromes egen Alt+E-meny inne i PasientSky.
+AltGr+E (€) påvirkes ikke. På Mac er hurtigtasten Option+E.
+
+KI-linjen, hurtigknappene og prøvesvar-panelet virker som for PasientSky:
+utgående eKontakt fyller emne og tekst, svar fyller svarfeltet. Hurtigknappene
+deles — «Svar»-visning brukes ved svar, «Utgående» ved ny melding.
+
 ### Hurtigknapper
 
 Konfigurerbare i innstillingene, med visning (svar/utgående/begge) og type:
@@ -154,7 +174,7 @@ innstillingene kommer via sync.
 | `util.js` | Felles hjelpere (deling, selektorer, fylling, toast) |
 | `source.js` | FastlegeKI: «Overfør tekst»-knapp |
 | `destination.js` | PasientSky: lær-felt-modus + innliming (alle frames) |
-| `dialog.js` | PasientSky: KI-linje for svar og utgående melding, hurtigknapper, prøvesvar-panel |
+| `dialog.js` | PasientSky: KI-linje for svar og utgående melding (PasientSky og eKontakt/Helsenorge), Alt+E, hurtigknapper, prøvesvar-panel |
 | `hotstrings.js` | Tekstutvidelse, registreres dynamisk på domenene i domenelisten |
 | `background.js` | Service worker: Claude API-kall, innebygd prompt, migrering, hotstring-registrering |
 | `options.html` / `options.js` | Innstillinger |
