@@ -133,6 +133,11 @@ ofte er for små til linjen. Ligger feltene i et slikt vindu, tegnes linjen i
 hovedvinduet rett over feltet, alltid på én linje, mens utfyllingen skjer i
 vinduet. Ellers tegnes den ved feltet som før.
 
+PasientSky lukker slike vinduer når de mister fokus. Knappene i linjen tar
+derfor ikke fokus (markøren blir stående i tekstfeltet), og når du klikker i
+stikkord- eller prøvesvarfeltet, stopper utvidelsen PasientSky sin
+«vinduet mistet fokus»-beskjed (`early.js`, lastes før PasientSky sin kode).
+
 ### Hurtigknapper
 
 Konfigurerbare i innstillingene, med visning (svar/utgående/begge) og type:
@@ -194,6 +199,7 @@ innstillingene kommer via sync.
 | `source.js` | FastlegeKI: «Overfør tekst»-knapp |
 | `destination.js` | PasientSky: lær-felt-modus + innliming (alle frames) |
 | `dialog.js` | PasientSky: KI-linje for svar og utgående melding (PasientSky og eKontakt/Helsenorge), hurtigknapper, prøvesvar-panel; linjen tegnes i hovedvinduet for felt i iframe-vinduer |
+| `early.js` | PasientSky (toppvindu, lastes først): hindrer at eKontakt-vinduet lukkes når du klikker i KI-linjen |
 | `ekontakt.js` | PasientSky: Alt+E åpner ny eKontakt via PasientSkys handlingskanal, med aktiv pasient når den er bekreftet |
 | `hotstrings.js` | Tekstutvidelse, registreres dynamisk på domenene i domenelisten |
 | `background.js` | Service worker: Claude API-kall, innebygd prompt, migrering, hotstring-registrering |

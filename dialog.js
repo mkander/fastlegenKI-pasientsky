@@ -397,6 +397,25 @@
     let lastJournal = "";
     let copyPending = false;   // notatet kunne ikke kopieres automatisk
 
+    // KI-linjen ligger ofte over et PasientSky-vindu som lukker seg når det
+    // mister fokus eller får et klikk utenfor seg. Derfor: knapper tar ikke
+    // fokus (fokus blir i vinduet/tekstfeltet), museklikk slipper ikke videre
+    // til PasientSky, og early.js stopper «window-blur» når fokus går hit
+    // (stikkord-/prøvesvarfeltet må ha fokus for å kunne skrives i).
+    const early = window.__flkEarly || null;
+    if (early) early.ours = (n) => !!(n && ((bar && bar.contains(n)) || (panel && panel.contains(n))));
+    function shield(root) {
+      root.addEventListener("pointerdown", () => { if (early) early.guardUntil = Date.now() + 1000; }, true);
+      root.addEventListener("mousedown", (e) => {
+        if (early) early.guardUntil = Date.now() + 1000;
+        const t = e.target;
+        if (!(t && t.closest && t.closest("input, textarea"))) e.preventDefault();
+      }, true);
+      for (const type of ["pointerdown", "mousedown", "pointerup", "mouseup", "click", "dblclick", "touchstart"]) {
+        root.addEventListener(type, (e) => e.stopPropagation()); // boble-fase: våre egne knapper har allerede fått klikket
+      }
+    }
+
     function qbForView(view) {
       return quickButtons.filter((b) => b.view === view || b.view === "begge");
     }
@@ -407,6 +426,7 @@
         bar.id = "flk-ai-bar";
         bar.style.display = "none";
         document.body.appendChild(bar);
+        shield(bar);
         // lukk ⋯-menyen ved klikk utenfor
         document.addEventListener("click", () => {
           for (const m of bar.querySelectorAll(".flk-ai-menu")) m.style.display = "none";
@@ -483,6 +503,7 @@
       btn.title = b.type === "ki" ? "KI-stikkord: " + (b.tekst || "") : "Fast mal settes inn umiddelbart";
       btn.addEventListener("click", (e) => {
         e.stopPropagation();
+        for (const m of bar.querySelectorAll(".flk-ai-menu")) m.style.display = "none";
         if (b.type === "ki") onGenerate({ stikkord: b.tekst || b.label, btnEl: btn });
         else onMal(b);
       });
@@ -520,6 +541,7 @@
         panel.appendChild(row);
         panel.addEventListener("click", (e) => e.stopPropagation());
         document.body.appendChild(panel);
+        shield(panel);
       }
       panel.style.display = "";
       positionPanel();
@@ -772,6 +794,7 @@
     // Hold på nåværende vindu så lenge det er aktivt (unngå flimring mellom to)
     if (remote && remote.token !== d.token && Date.now() - remote.seen < 2000 && remote.iframe.isConnected) return;
     remote = { iframe, win: e.source, token: d.token, mode: d.mode, rect: d.rect, seen: Date.now() };
+    if (window.__flkEarly) window.__flkEarly.frameId = iframe.id || null;
     topTick();
   });
 
