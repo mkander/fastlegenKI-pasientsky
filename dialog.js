@@ -403,7 +403,24 @@
     // til PasientSky, og early.js stopper «window-blur» når fokus går hit
     // (stikkord-/prøvesvarfeltet må ha fokus for å kunne skrives i).
     const early = window.__flkEarly || null;
-    if (early) early.ours = (n) => !!(n && ((bar && bar.contains(n)) || (panel && panel.contains(n))));
+    if (early) {
+      early.ours = (n) => !!(n && ((bar && bar.contains(n)) || (panel && panel.contains(n))));
+      // Klikket stoppes i early.js før det når knappen; kjør handlingen her.
+      early.onClick = (e) => {
+        for (let n = e.target; n && n !== document; n = n.parentNode) {
+          if (n.__flkClick) {
+            if (!n.__flkMore && bar) for (const m of bar.querySelectorAll(".flk-ai-menu")) m.style.display = "none";
+            if (!n.disabled) n.__flkClick(e);
+            return;
+          }
+        }
+      };
+    }
+    // Knappehandling: kalles av early.onClick i toppvinduet, ellers av vanlig klikk.
+    function onClick(node, fn) {
+      node.__flkClick = fn;
+      node.addEventListener("click", fn);
+    }
     function shield(root) {
       root.addEventListener("pointerdown", () => { if (early) early.guardUntil = Date.now() + 1000; }, true);
       root.addEventListener("mousedown", (e) => {
@@ -453,7 +470,7 @@
       const gen = el("button", "flk-ai-btn flk-ai-primary", mode === "utgaaende" ? "✨ Generer melding" : "✨ Generer svar");
       gen.type = "button";
       gen.id = "flk-ai-generate";
-      gen.addEventListener("click", () => onGenerate());
+      onClick(gen, () => onGenerate());
       bar.appendChild(gen);
 
       // hurtigknapper for denne visningen
@@ -472,7 +489,8 @@
           item.classList.add("flk-ai-menuitem");
           menu.appendChild(item);
         }
-        more.addEventListener("click", (e) => {
+        more.__flkMore = true;
+        onClick(more, (e) => {
           e.stopPropagation();
           menu.style.display = menu.style.display === "none" ? "" : "none";
         });
@@ -484,7 +502,7 @@
         const pr = el("button", "flk-ai-btn", "🧪 Prøvesvar");
         pr.type = "button";
         pr.title = "Lim inn prøvesvar/røntgensvar og få melding + journalnotat";
-        pr.addEventListener("click", (e) => { e.stopPropagation(); togglePanel(); });
+        onClick(pr, (e) => { e.stopPropagation(); togglePanel(); });
         bar.appendChild(pr);
       }
 
@@ -493,7 +511,7 @@
       copyBtn.id = "flk-ai-copy";
       copyBtn.style.display = lastJournal && copyPending ? "" : "none";
       copyBtn.title = "Kopier journalnotatet til utklippstavlen";
-      copyBtn.addEventListener("click", onCopyJournal);
+      onClick(copyBtn, onCopyJournal);
       bar.appendChild(copyBtn);
     }
 
@@ -501,7 +519,7 @@
       const btn = el("button", "flk-ai-btn flk-ai-qb", (b.type === "ki" ? "✨ " : "") + b.label);
       btn.type = "button";
       btn.title = b.type === "ki" ? "KI-stikkord: " + (b.tekst || "") : "Fast mal settes inn umiddelbart";
-      btn.addEventListener("click", (e) => {
+      onClick(btn, (e) => {
         e.stopPropagation();
         for (const m of bar.querySelectorAll(".flk-ai-menu")) m.style.display = "none";
         if (b.type === "ki") onGenerate({ stikkord: b.tekst || b.label, btnEl: btn });
@@ -524,7 +542,7 @@
         const row = el("div", "flk-ai-panel-row");
         const go = el("button", "flk-ai-btn flk-ai-primary", "✨ Generer melding");
         go.type = "button";
-        go.addEventListener("click", () => {
+        onClick(go, () => {
           const mat = ta.value.trim();
           if (!mat) { F.toast("Lim inn prøvesvaret først.", "error"); return; }
           panel.style.display = "none";
@@ -532,7 +550,7 @@
         });
         const cancel = el("button", "flk-ai-btn", "Avbryt");
         cancel.type = "button";
-        cancel.addEventListener("click", () => { panel.style.display = "none"; });
+        onClick(cancel, () => { panel.style.display = "none"; });
         row.appendChild(go);
         row.appendChild(cancel);
         panel.appendChild(title);

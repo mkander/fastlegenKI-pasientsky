@@ -133,10 +133,12 @@ ofte er for små til linjen. Ligger feltene i et slikt vindu, tegnes linjen i
 hovedvinduet rett over feltet, alltid på én linje, mens utfyllingen skjer i
 vinduet. Ellers tegnes den ved feltet som før.
 
-PasientSky lukker slike vinduer når de mister fokus. Knappene i linjen tar
-derfor ikke fokus (markøren blir stående i tekstfeltet), og når du klikker i
-stikkord- eller prøvesvarfeltet, stopper utvidelsen PasientSky sin
-«vinduet mistet fokus»-beskjed (`early.js`, lastes før PasientSky sin kode).
+PasientSky lukker slike vinduer ved klikk utenfor dem («click was not inside
+me») og når de mister fokus. `early.js` lastes før PasientSky sin kode og
+fanger derfor klikk på KI-linjen før PasientSky ser dem, og kjører knappens
+handling direkte. Knappene tar ikke fokus (markøren blir stående i
+tekstfeltet), og når du klikker i stikkord- eller prøvesvarfeltet, stoppes
+PasientSky sin «vinduet mistet fokus»-beskjed.
 
 ### Hurtigknapper
 
