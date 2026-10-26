@@ -26,5 +26,7 @@
   $("paste").addEventListener("click", () => send("fill"));
   $("learnDialog").addEventListener("click", () => send("startDialogLearn"));
   $("learnOutgoing").addEventListener("click", () => send("startOutgoingLearn"));
+  $("learnHnOut").addEventListener("click", () => send("startHnOutLearn"));
+  $("learnHnReply").addEventListener("click", () => send("startHnReplyLearn"));
   $("opts").addEventListener("click", (e) => { e.preventDefault(); chrome.runtime.openOptionsPage(); });
 })();

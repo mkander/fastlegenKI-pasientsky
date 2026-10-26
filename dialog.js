@@ -1,40 +1,93 @@
 /* dialog.js — kjører på PasientSky (pasientsky.no), i ALLE frames.
  *
- * KI-verktøylinje for meldinger til pasient, i to visninger:
+ * KI-verktøylinje for meldinger til pasient. Fire koblingstyper (popup),
+ * hver med egen kobling i chrome.storage.sync:
  *
- *   SVAR («Koble dialog» i popup): klikk på pasientens melding, deretter
+ *   PasientSky-dialog (svar): klikk på pasientens melding, deretter
  *   svarfeltet. Linjen viser stikkordfelt + «Generer svar» + hurtigknapper.
  *   Genereringen henter pasientmeldingen (evt. fra en annen frame via
  *   chrome.storage-handshake) og fyller svarfeltet.
  *
- *   UTGÅENDE («Koble ny melding» i popup): klikk på emnefeltet, deretter
+ *   PasientSky ny melding (utgående): klikk på emnefeltet, deretter
  *   tekstfeltet. Linjen viser i tillegg «Prøvesvar»-knapp for å lime inn
  *   prøvesvar/røntgensvar som KI-en lager melding av. Genereringen fyller
  *   både emne og tekst.
  *
- * I begge visninger legges et kort journalnotat på utklippstavlen.
- * Hurtigknapper (sync-nøkler "qb.*") er enten faste maler (settes inn
- * umiddelbart) eller KI-stikkord (sendes til Claude). Koblingene ligger i
- * chrome.storage.sync og deles mellom maskinene dine. */
+ *   eKontakt (Helsenorge, utgående): klikk på knappen som åpner ny
+ *   eKontakt, deretter emnefeltet og tekstfeltet. Alt+E trykker på knappen.
+ *
+ *   Helsenorge-svar: som PasientSky-dialog, men egen kobling.
+ *
+ * Helsenorge-typene oppfører seg som sine PasientSky-motstykker og deler
+ * hurtigknapper med dem. I begge visninger legges et kort journalnotat på
+ * utklippstavlen. Hurtigknapper (sync-nøkler "qb.*") er enten faste maler
+ * (settes inn umiddelbart) eller KI-stikkord (sendes til Claude). */
 (function () {
   "use strict";
   const F = window.FLK;
   if (!F) return;
   const isTop = window.top === window.self;
 
+  /* ---------------- koblingstyper ----------------
+   * mode avgjør KI-linjens oppførsel: "svar" (pasientmelding + svarfelt) eller
+   * "utgaaende" (emne + tekst). Steg: message = pasientens melding (ikke
+   * redigerbar), button = knapp (klikket slippes gjennom), ellers skrivefelt.
+   * texts[i] vises før steg i; siste tekst når koblingen er ferdig. */
+  const KINDS = {
+    dialog: {
+      mapKey: "dialogMap", learnKey: "dialogLearn", mode: "svar", label: "dialogen",
+      steps: ["message", "reply"],
+      texts: [
+        "Klikk på pasientens melding i dialogen.",
+        "Pasientmelding koblet. Klikk nå i svarfeltet (der du skriver svar).",
+        "Svarfelt koblet! «Generer svar» vises ved svarfeltet. ✔"
+      ]
+    },
+    outgoing: {
+      mapKey: "outgoingMap", learnKey: "outgoingLearn", mode: "utgaaende", label: "ny melding",
+      steps: ["subject", "body"],
+      texts: [
+        "Klikk i EMNEFELTET i «ny melding»-visningen.",
+        "Emnefelt koblet. Klikk nå i tekstfeltet for meldingen.",
+        "Ny melding koblet! KI-linjen vises ved tekstfeltet. ✔"
+      ]
+    },
+    hnOut: {
+      mapKey: "hnOutMap", learnKey: "hnOutLearn", mode: "utgaaende", label: "eKontakt",
+      steps: ["button", "subject", "body"],
+      texts: [
+        "Klikk på knappen som åpner ny eKontakt (Helsenorge).",
+        "eKontakt-knapp koblet (Alt+E). Klikk nå i EMNEFELTET i eKontakt.",
+        "Emnefelt koblet. Klikk nå i tekstfeltet for meldingen.",
+        "eKontakt koblet! Alt+E og KI-linjen er klare. ✔"
+      ]
+    },
+    hnReply: {
+      mapKey: "hnReplyMap", learnKey: "hnReplyLearn", mode: "svar", label: "Helsenorge-svar",
+      steps: ["message", "reply"],
+      texts: [
+        "Klikk på pasientens Helsenorge-melding.",
+        "Pasientmelding koblet. Klikk nå i svarfeltet (der du skriver svar).",
+        "Helsenorge-svar koblet! «Generer svar» vises ved svarfeltet. ✔"
+      ]
+    }
+  };
+  const KIND_NAMES = Object.keys(KINDS);
+  const FIELD_NAMES = { subject: "emnefeltet", body: "tekstfeltet", reply: "svarfeltet" };
+  const IDLE = { active: false, step: 0 };
+
   /* ---------------- cache av lagret tilstand ---------------- */
-  let dialogLearn = { active: false, step: 0 };   // local
-  let outgoingLearn = { active: false, step: 0 }; // local
-  let dialogMap = {};                             // sync {message, reply}
-  let outgoingMap = {};                           // sync {subject, body}
+  const learn = {}; // local, per type
+  const maps = {};  // sync, per type
+  for (const n of KIND_NAMES) { learn[n] = IDLE; maps[n] = {}; }
   let quickButtons = [];                          // sync qb.* (sortert)
   let qbVersion = 0;
 
-  F.get(["dialogLearn", "outgoingLearn", "dialogMap", "outgoingMap"]).then((r) => {
-    dialogLearn = r.dialogLearn || dialogLearn;
-    outgoingLearn = r.outgoingLearn || outgoingLearn;
-    dialogMap = r.dialogMap || {};
-    outgoingMap = r.outgoingMap || {};
+  F.get(KIND_NAMES.map((n) => KINDS[n].learnKey).concat(KIND_NAMES.map((n) => KINDS[n].mapKey))).then((r) => {
+    for (const n of KIND_NAMES) {
+      learn[n] = r[KINDS[n].learnKey] || learn[n];
+      maps[n] = r[KINDS[n].mapKey] || {};
+    }
   });
 
   function loadQuickButtons() {
@@ -62,87 +115,79 @@
     return el;
   }
 
-  function captureEntry(el) {
-    return { key: F.frameKey(), selector: F.cssPath(el), attrs: F.captureAttrs(el) };
+  const CLICKABLE = 'button,a,[role="button"],[role="menuitem"],[role="tab"],input[type="button"],input[type="submit"]';
+
+  // Klikk treffer ofte ikon/tekst inne i knappen — bruk selve knappen.
+  function clickableFrom(el) {
+    return (el && el.closest && el.closest(CLICKABLE)) || el;
+  }
+
+  function shortText(el) {
+    const t = ((el.innerText || el.textContent || "") + "").replace(/\s+/g, " ").trim();
+    return t.length <= 80 ? t : "";
+  }
+
+  function captureEntry(el, part) {
+    const attrs = F.captureAttrs(el);
+    if (part === "button") attrs.text = shortText(el);
+    return { key: F.frameKey(), selector: F.cssPath(el), attrs };
+  }
+
+  function activeLearn() {
+    for (const n of KIND_NAMES) if (learn[n] && learn[n].active) return n;
+    return null;
   }
 
   document.addEventListener(
     "click",
-    async function (e) {
-      if (!dialogLearn.active && !outgoingLearn.active) return; // rask sjekk
-      const { dialogLearn: dl, outgoingLearn: ol } = await F.get(["dialogLearn", "outgoingLearn"]);
+    function (e) {
+      const name = activeLearn(); // fra cache: må avgjøres synkront for preventDefault
+      if (!name) return;
+      const kind = KINDS[name];
+      const step = learn[name].step || 0;
+      const part = kind.steps[step];
+      if (!part) return;
 
-      if (dl && dl.active) {
+      let target;
+      if (part === "button") {
+        target = clickableFrom(e.target); // la klikket gå videre, så eKontakt åpnes
+      } else {
         e.preventDefault();
         e.stopPropagation();
-        const map = (await F.get("dialogMap")).dialogMap || {};
-        if (dl.step === 0) {
-          map.message = captureEntry(messageContainerFrom(e.target));
-          await F.set({ dialogMap: map, dialogLearn: { active: true, step: 1 } });
-          F.toast("Pasientmelding koblet. Klikk nå i svarfeltet (der du skriver svar).", "ok");
-        } else {
-          const el = F.editableFrom(e.target);
-          if (!el) { F.toast("Det var ikke et skrivefelt – klikk i selve svarfeltet.", "error"); return; }
-          map.reply = captureEntry(el);
-          await F.set({ dialogMap: map, dialogLearn: { active: false, step: 0 } });
-          F.toast("Svarfelt koblet! «Generer svar» vises ved svarfeltet. ✔", "ok");
-        }
-        return;
-      }
-
-      if (ol && ol.active) {
-        e.preventDefault();
-        e.stopPropagation();
-        const el = F.editableFrom(e.target);
-        if (!el) {
-          F.toast(ol.step === 0
-            ? "Det var ikke et skrivefelt – klikk i emnefeltet."
-            : "Det var ikke et skrivefelt – klikk i tekstfeltet.", "error");
+        target = part === "message" ? messageContainerFrom(e.target) : F.editableFrom(e.target);
+        if (!target) {
+          F.toast("Det var ikke et skrivefelt – klikk i " + FIELD_NAMES[part] + ".", "error");
           return;
         }
-        const map = (await F.get("outgoingMap")).outgoingMap || {};
-        if (ol.step === 0) {
-          map.subject = captureEntry(el);
-          await F.set({ outgoingMap: map, outgoingLearn: { active: true, step: 1 } });
-          F.toast("Emnefelt koblet. Klikk nå i tekstfeltet for meldingen.", "ok");
-        } else {
-          map.body = captureEntry(el);
-          await F.set({ outgoingMap: map, outgoingLearn: { active: false, step: 0 } });
-          F.toast("Ny melding koblet! KI-linjen vises ved tekstfeltet. ✔", "ok");
-        }
       }
+      const next = step + 1;
+      const done = next >= kind.steps.length;
+      learn[name] = done ? IDLE : { active: true, step: next }; // ikke registrer dobbeltklikk to ganger
+      saveStep(name, part, captureEntry(target, part), done, next);
     },
     true // capture-fase, foran PasientSky sin egen logikk
   );
 
-  async function toggleDialogLearn() {
-    const { dialogLearn: st } = await F.get("dialogLearn");
-    if (st && st.active) {
-      await F.set({ dialogLearn: { active: false, step: 0 } });
-      F.toast("Dialogkobling avbrutt.", "");
-    } else {
-      await F.set({
-        dialogMap: {},
-        dialogLearn: { active: true, step: 0 },
-        outgoingLearn: { active: false, step: 0 }
-      });
-      F.toast("Klikk på pasientens melding i dialogen.", "ok");
-    }
+  async function saveStep(name, part, entry, done, next) {
+    const kind = KINDS[name];
+    const map = (await F.get(kind.mapKey))[kind.mapKey] || {};
+    map[part] = entry;
+    await F.set({ [kind.mapKey]: map, [kind.learnKey]: done ? IDLE : { active: true, step: next } });
+    F.toast(kind.texts[next], "ok");
   }
 
-  async function toggleOutgoingLearn() {
-    const { outgoingLearn: st } = await F.get("outgoingLearn");
+  async function toggleLearn(name) {
+    const kind = KINDS[name];
+    const st = (await F.get(kind.learnKey))[kind.learnKey];
     if (st && st.active) {
-      await F.set({ outgoingLearn: { active: false, step: 0 } });
-      F.toast("Kobling av ny melding avbrutt.", "");
-    } else {
-      await F.set({
-        outgoingMap: {},
-        outgoingLearn: { active: true, step: 0 },
-        dialogLearn: { active: false, step: 0 }
-      });
-      F.toast("Klikk i EMNEFELTET i «ny melding»-visningen.", "ok");
+      await F.set({ [kind.learnKey]: IDLE });
+      F.toast("Kobling av " + kind.label + " avbrutt.", "");
+      return;
     }
+    const upd = { [kind.mapKey]: {} };
+    for (const n of KIND_NAMES) upd[KINDS[n].learnKey] = n === name ? { active: true, step: 0 } : IDLE;
+    await F.set(upd);
+    F.toast(kind.texts[0], "ok");
   }
 
   /* ---------------- gjenfinning ---------------- */
@@ -170,6 +215,38 @@
     return null;
   }
 
+  function isVisible(el) {
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0;
+  }
+
+  // Knappen er heller ikke redigerbar. Kun entydige, synlige treff godtas;
+  // knappeteksten (f.eks. «eKontakt») er ofte det mest stabile kjennetegnet.
+  function findButtonEl(entry) {
+    if (!entry) return null;
+    const a = entry.attrs || {};
+    const esc = (s) => String(s).replace(/(["\\])/g, "\\$1");
+    const uniq = (list) => {
+      const vis = Array.from(list).filter(isVisible);
+      return vis.length === 1 ? vis[0] : null;
+    };
+    const sels = [];
+    if (a.id) sels.push("#" + CSS.escape(a.id));
+    for (const k of Object.keys(a.data || {})) sels.push("[" + k + '="' + esc(a.data[k]) + '"]');
+    if (a.ariaLabel) sels.push('[aria-label="' + esc(a.ariaLabel) + '"]');
+    for (const sel of sels) {
+      try { const el = uniq(document.querySelectorAll(sel)); if (el) return el; } catch (e) {}
+    }
+    if (a.text) {
+      const el = uniq(Array.from(document.querySelectorAll(CLICKABLE)).filter((n) => shortText(n) === a.text));
+      if (el) return el;
+    }
+    if (entry.selector) {
+      try { const el = uniq(document.querySelectorAll(entry.selector)); if (el) return el; } catch (e) {}
+    }
+    return null;
+  }
+
   function readMessageText(el) {
     return ((el.innerText || el.textContent || "") + "").trim();
   }
@@ -179,18 +256,74 @@
     return F.findElement(entry);
   }
 
+  /* ---------------- Alt+E: åpne ny eKontakt ----------------
+   * Tasten fanges i den framen som har fokus. Ligger knappen i en annen frame,
+   * sendes en forespørsel via storage ("hnClick"); framen som finner knappen
+   * klikker og kvitterer. Uten kvittering vises en feilmelding. */
+  let pendingClick = null;
+
+  document.addEventListener(
+    "keydown",
+    function (e) {
+      // AltGr er Ctrl+Alt på Windows (AltGr+E = €) og skal ikke fanges.
+      if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || e.code !== "KeyE") return;
+      e.preventDefault(); // også Chromes egen Alt+E-meny og Option+E (´) på Mac
+      e.stopPropagation();
+      if (!e.repeat) openEkontakt();
+    },
+    true
+  );
+
+  function openEkontakt() {
+    const entry = maps.hnOut.button;
+    if (!entry) {
+      F.toast("eKontakt-knappen er ikke koblet. Bruk popup → «Koble eKontakt – ny melding».", "error");
+      return;
+    }
+    if (entry.key === F.frameKey()) {
+      const btn = findButtonEl(entry);
+      if (btn) { btn.click(); return; }
+    }
+    if (pendingClick) clearTimeout(pendingClick.timer);
+    const req = Date.now() + "-" + Math.random().toString(36).slice(2);
+    pendingClick = {
+      req,
+      timer: setTimeout(() => {
+        pendingClick = null;
+        F.toast("Fant ikke eKontakt-knappen – er en pasient åpen? Koble eKontakt på nytt om den har flyttet seg.", "error");
+      }, 1500)
+    };
+    F.set({ hnClick: { req } });
+  }
+
+  function handleClickRequest(v) {
+    if (!v || !v.req) return;
+    if (v.ok) {
+      if (pendingClick && pendingClick.req === v.req) { clearTimeout(pendingClick.timer); pendingClick = null; }
+      return;
+    }
+    if (pendingClick && pendingClick.req === v.req) return; // egen forespørsel – knappen var ikke her
+    const entry = maps.hnOut.button;
+    if (!entry || entry.key !== F.frameKey()) return;
+    const btn = findButtonEl(entry);
+    if (!btn) return; // en annen frame med samme adresse kan ha den
+    btn.click();
+    F.set({ hnClick: { req: v.req, ok: true } });
+  }
+
   /* ---------------- henting på tvers av frames ---------------- */
   let pendingExtract = null;
 
   function extractHere(map) {
     const el = findMessageEl(map.message);
-    if (!el) return { error: "Fant ikke pasientmeldingen – koble dialogen på nytt." };
+    if (!el) return { error: "Fant ikke pasientmeldingen – koble på nytt." };
     const text = readMessageText(el);
-    if (!text) return { error: "Pasientmeldingen ser tom ut – koble dialogen på nytt." };
+    if (!text) return { error: "Pasientmeldingen ser tom ut – koble på nytt." };
     return { text };
   }
 
-  async function getPatientMessage(map) {
+  async function getPatientMessage(name) {
+    const map = maps[name];
     if (!map.message) throw new Error("Pasientmeldingen er ikke koblet.");
     if (map.message.key === F.frameKey()) {
       const r = extractHere(map);
@@ -202,7 +335,7 @@
     const promise = new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         pendingExtract = null;
-        reject(new Error("Fikk ikke hentet pasientmeldingen. Koble dialogen på nytt."));
+        reject(new Error("Fikk ikke hentet pasientmeldingen. Koble " + KINDS[name].label + " på nytt."));
       }, 4000);
       pendingExtract = {
         req,
@@ -210,7 +343,7 @@
         reject: (e) => { clearTimeout(timer); pendingExtract = null; reject(e); }
       };
     });
-    await F.set({ dialogExtract: { req } });
+    await F.set({ dialogExtract: { req, kind: name } });
     return promise;
   }
 
@@ -224,7 +357,9 @@
       return;
     }
     // Ny forespørsel: er meldingselementet i denne framen?
-    const map = dialogMap && dialogMap.message ? dialogMap : ((await F.get("dialogMap")).dialogMap || {});
+    const name = KINDS[v.kind] ? v.kind : "dialog";
+    const mapKey = KINDS[name].mapKey;
+    const map = maps[name].message ? maps[name] : ((await F.get(mapKey))[mapKey] || {});
     if (!map.message || map.message.key !== F.frameKey()) return;
     const r = extractHere(map);
     await F.set({ dialogExtract: { req: v.req, text: r.text, error: r.error } });
@@ -234,6 +369,7 @@
   let bar = null;
   let panel = null; // prøvesvar-panel
   let barMode = null;         // "svar" | "utgaaende" | null
+  let barKind = null;         // koblingstype (nøkkel i KINDS) linjen gjelder
   let renderedKey = "";       // modus + qb-versjon linjen sist ble bygget for
   let anchorEl = null;
   let generating = false;
@@ -404,29 +540,44 @@
     positionPanel();
   }
 
-  function tick() {
-    // Utgående visning har forrang: der finnes både emne- og tekstfelt.
-    let mode = null;
-    let anchor = null;
-    const subjEl = ownedEl(outgoingMap.subject);
-    const bodyEl = subjEl ? ownedEl(outgoingMap.body) : null;
-    if (subjEl && bodyEl) {
-      mode = "utgaaende";
-      anchor = bodyEl;
-    } else {
-      const replyEl = ownedEl(dialogMap.reply);
-      if (replyEl) { mode = "svar"; anchor = replyEl; }
+  // Hvilken koblingstype passer visningen i denne framen? Utgående har forrang
+  // (der finnes både emne- og tekstfelt). Treffer flere svar-koblinger samme
+  // svarfelt, velges den der pasientmeldingen faktisk finnes.
+  function detect() {
+    for (const name of ["hnOut", "outgoing"]) {
+      const m = maps[name];
+      const subjEl = ownedEl(m.subject);
+      const bodyEl = subjEl ? ownedEl(m.body) : null;
+      if (subjEl && bodyEl) return { kind: name, anchor: bodyEl };
     }
+    let best = null;
+    for (const name of ["hnReply", "dialog"]) {
+      const m = maps[name];
+      const replyEl = ownedEl(m.reply);
+      if (!replyEl) continue;
+      const score = !m.message ? 0
+        : m.message.key !== F.frameKey() ? 1
+        : findMessageEl(m.message) ? 2 : 0;
+      if (!best || score > best.score) best = { kind: name, anchor: replyEl, score };
+    }
+    return best;
+  }
 
-    if (!mode) {
+  function tick() {
+    const found = detect();
+
+    if (!found) {
       barMode = null;
+      barKind = null;
       anchorEl = null;
       if (bar) bar.style.display = "none";
       if (panel) panel.style.display = "none";
       return;
     }
 
-    anchorEl = anchor;
+    const mode = KINDS[found.kind].mode;
+    if (!generating) barKind = found.kind; // ikke bytt type midt i en generering
+    anchorEl = found.anchor;
     const key = mode + "|" + qbVersion;
     if (key !== renderedKey) {
       renderBar(mode);
@@ -493,10 +644,29 @@
     if (btnEl) btnEl.textContent = busy ? "…" : btnEl.textContent;
   }
 
+
+  // Fyll feltene for aktiv koblingstype: emne + tekst (utgående) eller svarfelt.
+  function fillFields(kindName, emne, tekst) {
+    const kind = KINDS[kindName];
+    const map = maps[kindName];
+    if (kind.mode === "utgaaende") {
+      const subjEl = ownedEl(map.subject);
+      const bodyEl = ownedEl(map.body);
+      if (!bodyEl) throw new Error("Fant ikke tekstfeltet – koble " + kind.label + " på nytt.");
+      if (subjEl && emne) F.fillField(subjEl, emne);
+      F.fillField(bodyEl, tekst);
+    } else {
+      const replyEl = ownedEl(map.reply);
+      if (!replyEl) throw new Error("Fant ikke svarfeltet – koble " + kind.label + " på nytt.");
+      F.fillField(replyEl, tekst);
+    }
+  }
+
   async function onGenerate(opts) {
     opts = opts || {};
-    if (generating || !barMode) return;
+    if (generating || !barMode || !barKind) return;
     const mode = barMode;
+    const kindName = barKind;
     setBusy(true, opts.btnEl);
     try {
       const stikkord = opts.stikkord != null
@@ -512,24 +682,14 @@
           materiale: opts.materiale ? scrubMateriale(opts.materiale) : ""
         };
       } else {
-        const melding = await getPatientMessage(dialogMap);
+        const melding = await getPatientMessage(kindName);
         payload = { action: "flkGenerate", mode: "svar", stikkord, melding };
       }
 
       const resp = await sendToBackground(payload);
       if (!resp || !resp.ok) throw new Error((resp && resp.error) || "Ukjent feil ved generering.");
 
-      if (mode === "utgaaende") {
-        const subjEl = ownedEl(outgoingMap.subject);
-        const bodyEl = ownedEl(outgoingMap.body);
-        if (!bodyEl) throw new Error("Fant ikke tekstfeltet – koble ny melding på nytt.");
-        if (subjEl && resp.emne) F.fillField(subjEl, resp.emne);
-        F.fillField(bodyEl, resp.svar);
-      } else {
-        const replyEl = ownedEl(dialogMap.reply);
-        if (!replyEl) throw new Error("Fant ikke svarfeltet – koble dialogen på nytt.");
-        F.fillField(replyEl, resp.svar);
-      }
+      fillFields(kindName, resp.emne, resp.svar);
 
       const copied = await deliverJournal(resp.journalnotat);
       F.toast(copied
@@ -545,19 +705,9 @@
   }
 
   async function applyMal(b) {
-    if (generating || !barMode) return;
+    if (generating || !barMode || !barKind) return;
     try {
-      if (barMode === "utgaaende") {
-        const subjEl = ownedEl(outgoingMap.subject);
-        const bodyEl = ownedEl(outgoingMap.body);
-        if (!bodyEl) throw new Error("Fant ikke tekstfeltet – koble ny melding på nytt.");
-        if (subjEl && b.emne) F.fillField(subjEl, b.emne);
-        F.fillField(bodyEl, b.tekst || "");
-      } else {
-        const replyEl = ownedEl(dialogMap.reply);
-        if (!replyEl) throw new Error("Fant ikke svarfeltet – koble dialogen på nytt.");
-        F.fillField(replyEl, b.tekst || "");
-      }
+      fillFields(barKind, b.emne, b.tekst || "");
       const copied = await deliverJournal(b.notat || "");
       F.toast(copied
         ? (b.notat ? "Mal lagt inn. Journalnotatet ligger på utklippstavlen. ✔" : "Mal lagt inn. ✔")
@@ -578,26 +728,35 @@
     }
   }
 
+
   /* ---------------- storage-endringer ---------------- */
   F.onChanged((changes, _area) => {
-    if (changes.dialogLearn) dialogLearn = changes.dialogLearn.newValue || { active: false, step: 0 };
-    if (changes.outgoingLearn) outgoingLearn = changes.outgoingLearn.newValue || { active: false, step: 0 };
-    if (changes.dialogMap) dialogMap = changes.dialogMap.newValue || {};
-    if (changes.outgoingMap) outgoingMap = changes.outgoingMap.newValue || {};
+    for (const n of KIND_NAMES) {
+      const k = KINDS[n];
+      if (changes[k.learnKey]) learn[n] = changes[k.learnKey].newValue || IDLE;
+      if (changes[k.mapKey]) maps[n] = changes[k.mapKey].newValue || {};
+    }
     if (changes.dialogExtract) handleExtractChange(changes.dialogExtract.newValue);
+    if (changes.hnClick) handleClickRequest(changes.hnClick.newValue);
     for (const k of Object.keys(changes)) {
       if (k.indexOf("qb.") === 0) { loadQuickButtons(); break; }
     }
   });
 
   /* ---------------- popup-meldinger ---------------- */
+  const LEARN_ACTIONS = {
+    startDialogLearn: "dialog",
+    startOutgoingLearn: "outgoing",
+    startHnOutLearn: "hnOut",
+    startHnReplyLearn: "hnReply"
+  };
   try {
     if (chrome && chrome.runtime && chrome.runtime.onMessage) {
       chrome.runtime.onMessage.addListener((msg, _s, sendResponse) => {
         // kun toppvinduet svarer, ellers toggles tilstanden én gang per frame
         if (!msg || !isTop) return false;
-        if (msg.action === "startDialogLearn") { toggleDialogLearn(); sendResponse({ ok: true }); }
-        else if (msg.action === "startOutgoingLearn") { toggleOutgoingLearn(); sendResponse({ ok: true }); }
+        const name = LEARN_ACTIONS[msg.action];
+        if (name) { toggleLearn(name); sendResponse({ ok: true }); }
         return false;
       });
     }
