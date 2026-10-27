@@ -103,23 +103,16 @@ kobles derfor for seg (popupen):
    (Helsenorge)»**, klikk i emnefeltet og deretter i tekstfeltet.
 2. **Svar:** popup → **«Koble eKontakt – svar (Helsenorge)»**. Klikk på
    pasientens melding, deretter i svarfeltet.
-3. **Pasientfelt (for Alt+E):** popup → **«Koble pasientfelt øverst»**, klikk
-   på feltet øverst i PasientSky der navn og fødselsnummer på aktiv pasient står.
 
 **Alt+E** åpner ny eKontakt fra hvor som helst i PasientSky, også mens du
 skriver i et felt. Utvidelsen sender samme handling som PasientSky selv bruker
 (ingen menyklikk), så det virker uavhengig av hvor menyen ligger.
 
-- **Aktiv pasient bekreftet** → eKontakt åpnes for den pasienten.
-- **Ellers** → eKontakt åpnes uten pasient, og du velger pasient i dialogen.
-
-PasientSky har ingen aktiv pasient-ID utvidelsen kan lese direkte. Den følger
-derfor med når en modul (timebok, innboks, labsvar …) aktiverer en pasient, og
-sikrer det mot pasientfeltet øverst: utvidelsen husker et fingeravtrykk (hash,
-kun i minnet – teksten lagres aldri) av feltet slik det så ut etter byttet.
-Ved Alt+E brukes pasienten bare hvis feltet fortsatt ser likt ut. Er pasienten
-byttet på en måte utvidelsen ikke så (f.eks. søk øverst), eller er siden
-nettopp lastet på nytt, åpnes eKontakt uten pasient. Utvidelsen gjetter aldri.
+eKontakt åpnes uten pasient. Har PasientSky en aktiv pasient, viser skjemaet
+knappen **«Bruk aktiv pasient»** – den trykkes automatisk når eKontakt er åpnet
+med Alt+E. Det er altså PasientSky selv som bestemmer hvem som er aktiv
+pasient; sjekk likevel alltid mottakeren før du sender. Uten aktiv pasient
+vises ingen knapp, og du velger pasient i skjemaet.
 
 Alt+E overstyrer Chromes egen Alt+E-meny og PasientSkys egen Alt+E (Epikrise,
 elektronisk) inne i PasientSky. AltGr+E (€) påvirkes ikke. På Mac: Option+E.
@@ -127,6 +120,7 @@ elektronisk) inne i PasientSky. AltGr+E (€) påvirkes ikke. På Mac: Option+E.
 KI-linjen, hurtigknappene og prøvesvar-panelet virker som for PasientSky:
 utgående eKontakt fyller emne og tekst, svar fyller svarfeltet. Hurtigknappene
 deles — «Svar»-visning brukes ved svar, «Utgående» ved ny melding.
+Stikkordfeltet tømmes etter hver vellykkede generering og når vinduet lukkes.
 
 **Plassering av KI-linjen:** PasientSky-vinduer (som eKontakt) er iframer som
 ofte er for små til linjen. Ligger feltene i et slikt vindu, tegnes linjen i
@@ -202,7 +196,7 @@ innstillingene kommer via sync.
 | `destination.js` | PasientSky: lær-felt-modus + innliming (alle frames) |
 | `dialog.js` | PasientSky: KI-linje for svar og utgående melding (PasientSky og eKontakt/Helsenorge), hurtigknapper, prøvesvar-panel; linjen tegnes i hovedvinduet for felt i iframe-vinduer |
 | `early.js` | PasientSky (toppvindu, lastes først): hindrer at eKontakt-vinduet lukkes når du klikker i KI-linjen |
-| `ekontakt.js` | PasientSky: Alt+E åpner ny eKontakt via PasientSkys handlingskanal, med aktiv pasient når den er bekreftet |
+| `ekontakt.js` | PasientSky: Alt+E åpner ny eKontakt via PasientSkys handlingskanal og trykker «Bruk aktiv pasient» |
 | `hotstrings.js` | Tekstutvidelse, registreres dynamisk på domenene i domenelisten |
 | `background.js` | Service worker: Claude API-kall, innebygd prompt, migrering, hotstring-registrering |
 | `options.html` / `options.js` | Innstillinger |

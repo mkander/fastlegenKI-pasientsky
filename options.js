@@ -278,8 +278,8 @@
   }
 
   async function renderDialog() {
-    const { dialogMap, outgoingMap, hnOutMap, hnReplyMap, patientField } =
-      await sGet(["dialogMap", "outgoingMap", "hnOutMap", "hnReplyMap", "patientField"]);
+    const { dialogMap, outgoingMap, hnOutMap, hnReplyMap } =
+      await sGet(["dialogMap", "outgoingMap", "hnOutMap", "hnReplyMap"]);
     const dm = dialogMap || {};
     const om = outgoingMap || {};
     const ho = hnOutMap || {};
@@ -297,10 +297,7 @@
       line("eKontakt – emnefelt", ho.subject) + "\n" +
       line("eKontakt – tekstfelt", ho.body) + "\n" +
       line("Helsenorge-svar – pasientmelding", hr.message) + "\n" +
-      line("Helsenorge-svar – svarfelt", hr.reply) + "\n" +
-      (patientField && patientField.selector
-        ? "Pasientfelt øverst (Alt+E): [" + patientField.selector + "]"
-        : "Pasientfelt øverst (Alt+E): (ikke koblet – eKontakt åpnes uten pasient)");
+      line("Helsenorge-svar – svarfelt", hr.reply);
   }
 
   /* ==================== last inn / lagre ==================== */
@@ -361,7 +358,7 @@
 
   /* ==================== eksport / import ==================== */
 
-  const EXPORT_KEYS = ["settings", "ai", "fieldMap", "dialogMap", "outgoingMap", "hnOutMap", "hnReplyMap", "patientField", "hsDomains"];
+  const EXPORT_KEYS = ["settings", "ai", "fieldMap", "dialogMap", "outgoingMap", "hnOutMap", "hnReplyMap", "hsDomains"];
   function exportable(k) {
     return EXPORT_KEYS.indexOf(k) !== -1 || k.indexOf("hs.") === 0 || k.indexOf("qb.") === 0;
   }
@@ -435,8 +432,8 @@
   });
   $("resetHn").addEventListener("click", async () => {
     try {
-      await sSet({ hnOutMap: {}, hnReplyMap: {}, patientField: null });
-      await lSet({ hnOutLearn: { active: false, step: 0 }, hnReplyLearn: { active: false, step: 0 }, patientFieldLearn: { active: false } });
+      await sSet({ hnOutMap: {}, hnReplyMap: {} });
+      await lSet({ hnOutLearn: { active: false, step: 0 }, hnReplyLearn: { active: false, step: 0 } });
     } catch (err) { alert("Lagring feilet: " + err.message); }
     renderDialog();
   });
@@ -444,7 +441,7 @@
   chrome.storage.onChanged.addListener((c, area) => {
     if (area !== "sync") return;
     if (c.fieldMap) renderMap();
-    if (c.dialogMap || c.outgoingMap || c.hnOutMap || c.hnReplyMap || c.patientField) renderDialog();
+    if (c.dialogMap || c.outgoingMap || c.hnOutMap || c.hnReplyMap) renderDialog();
     if (c.hsDomains) renderDomains();
   });
 

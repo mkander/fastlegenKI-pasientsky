@@ -28,6 +28,5 @@
   $("learnOutgoing").addEventListener("click", () => send("startOutgoingLearn"));
   $("learnHnOut").addEventListener("click", () => send("startHnOutLearn"));
   $("learnHnReply").addEventListener("click", () => send("startHnReplyLearn"));
-  $("learnPatient").addEventListener("click", () => send("startPatientFieldLearn"));
   $("opts").addEventListener("click", (e) => { e.preventDefault(); chrome.runtime.openOptionsPage(); });
 })();

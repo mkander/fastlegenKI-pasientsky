@@ -608,8 +608,14 @@
       reposition();
     }
 
+    function clearStikkord() {
+      const inp = bar && bar.querySelector("#flk-ai-stikkord");
+      if (inp) inp.value = "";
+    }
+
     function hide() {
       if (busy) return; // behold linjen til genereringen er ferdig
+      if (mode) clearStikkord(); // vinduet er lukket – ikke ta med stikkord til neste
       mode = null;
       getRect = null;
       if (bar) bar.style.display = "none";
@@ -647,6 +653,7 @@
           : (bar.querySelector("#flk-ai-stikkord") || {}).value || "";
         const res = await backend.generate({ stikkord, materiale: opts.materiale || "" });
         if (!res || !res.ok) throw new Error((res && res.error) || "Ukjent feil ved generering.");
+        clearStikkord(); // nytt stikkord for neste melding
         const copied = await deliverJournal(res.journal);
         F.toast(copied
           ? "Tekst lagt inn. Journalnotatet ligger på utklippstavlen. ✔"
