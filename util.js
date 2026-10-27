@@ -4,7 +4,7 @@
 (function () {
   "use strict";
   if (window.FLK) return; // unngå dobbel-injeksjon (PasientSky har mange frames)
-  console.log("[FLK] util.js v12 lastet i", location.href);
+  console.log("[FLK] util.js v13 lastet i", location.href);
 
   const DEFAULTS = {
     headings: ["OVERSKRIFT1", "OVERSKRIFT2", "OVERSKRIFT3", "OVERSKRIFT4"],
@@ -25,7 +25,7 @@
      Defensive: noen PasientSky-iframes er sandboxed/opaque-origin der
      content-scriptet kjører, men chrome.storage-API-et ikke finnes. Da
      resolver vi tomt i stedet for å kaste. */
-  const SYNC_KEYS = ["settings", "ai", "fieldMap", "dialogMap", "outgoingMap", "hnOutMap", "hnReplyMap", "patientField", "hsDomains"];
+  const SYNC_KEYS = ["settings", "ai", "fieldMap", "dialogMap", "outgoingMap", "hnOutMap", "hnReplyMap", "hsDomains"];
   const SYNC_PREFIXES = ["hs.", "qb."];
   function isSyncKey(k) {
     if (SYNC_KEYS.indexOf(k) !== -1) return true;
@@ -370,18 +370,23 @@
   }
 
   // Finn nærmeste redigerbare element i tilknytning til et label/overskrift-element.
-  function editableNear(labelEl) {
+  function editableNear(labelEl, accept) {
+    const ok = (c) => isEditable(c) && (!accept || accept(c));
     // 1) eksplisitt for-kobling
     const forId = labelEl.getAttribute && labelEl.getAttribute("for");
     if (forId) {
       const t = document.getElementById(forId);
-      if (t && isEditable(t)) return t;
+      if (t && ok(t)) return t;
     }
-    // 2) redigerbart inni samme blokk, ellers klatre oppover og søk etterfølgende
+    // 2) redigerbart inni samme blokk, ellers klatre oppover og søk etterfølgende.
+    // Kun felt som står ETTER etiketten: et felt over (f.eks. pasientsøk over
+    // «Emne») hører til en annen etikett.
     let scope = labelEl, depth = 0;
     while (scope && depth < 6) {
-      const cand = scope.querySelector && scope.querySelector('input,textarea,[contenteditable=""],[contenteditable="true"]');
-      if (cand && isEditable(cand)) return cand;
+      const cands = scope.querySelectorAll ? scope.querySelectorAll('input,textarea,[contenteditable=""],[contenteditable="true"]') : [];
+      for (const cand of cands) {
+        if (ok(cand) && (labelEl.compareDocumentPosition(cand) & Node.DOCUMENT_POSITION_FOLLOWING)) return cand;
+      }
       scope = scope.parentElement;
       depth++;
     }
@@ -391,12 +396,12 @@
   // Finn feltet via etikett-/overskrifts-teksten ved siden av det. Dette er det
   // mest robuste signalet for editorer uten stabil id/name (f.eks. PasientSky
   // sine Draft.js-felt med .SOAP-field-label «Anamnese», «Vurdering» osv.).
-  function findByLabelText(text) {
+  function findByLabelText(text, accept) {
     if (!text) return null;
     const labels = Array.from(document.querySelectorAll(LABEL_SELECTOR));
     const matches = labels.filter((l) => cleanText(l.textContent) === text);
     for (const lbl of matches) {
-      const el = editableNear(lbl);
+      const el = editableNear(lbl, accept);
       if (el) return el;
     }
     return null;
@@ -427,7 +432,11 @@
     // 1) stabile attributter
     for (const sel of attrSelectors) { const el = uniq(sel); if (el) return el; }
     // 2) etikett-/overskrifts-tekst ved siden av feltet (mest robust her)
-    const byLabel = findByLabelText(attrs.labelText || attrs.nearText);
+    // Felt uten egen etikett (f.eks. meldingsfeltet rett under «Emne» i
+    // eKontakt) arver nabofeltets etikett – krev derfor samme type og klasse.
+    const sameKind = (c) => (!attrs.tag || c.tagName.toLowerCase() === attrs.tag) &&
+      (!attrs.classes || !attrs.classes.length || attrs.classes.some((k) => c.classList.contains(k)));
+    const byLabel = findByLabelText(attrs.labelText || attrs.nearText, sameKind);
     if (byLabel) return byLabel;
     // 3) posisjonsbasert selektor (siste utvei)
     if (entry.selector) { const el = uniq(entry.selector); if (el) return el; }
