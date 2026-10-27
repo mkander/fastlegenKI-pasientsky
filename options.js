@@ -6,7 +6,8 @@
   const DEFAULTS = {
     headings: ["OVERSKRIFT1", "OVERSKRIFT2", "OVERSKRIFT3", "OVERSKRIFT4"],
     includeHeading: false,
-    sourceField: "#responseBox"
+    sourceField: "#responseBox",
+    copyButton: "#copyBtn"
   };
   const DEFAULT_MODEL = "claude-opus-5-5";
   const $ = (id) => document.getElementById(id);
@@ -311,6 +312,7 @@
     $("h4").value = s.headings[3] || "";
     $("includeHeading").checked = !!s.includeHeading;
     $("sourceField").value = s.sourceField || "#responseBox";
+    $("copyButton").value = s.copyButton || "#copyBtn";
     const a = ai || {};
     $("apiKey").value = a.apiKey || "";
     $("aiModel").value = a.model || DEFAULT_MODEL;
@@ -325,7 +327,8 @@
     const settings = {
       headings: [$("h1").value, $("h2").value, $("h3").value, $("h4").value].map((x) => x.trim()),
       includeHeading: $("includeHeading").checked,
-      sourceField: $("sourceField").value.trim() || "#responseBox"
+      sourceField: $("sourceField").value.trim() || "#responseBox",
+      copyButton: $("copyButton").value.trim() || "#copyBtn"
     };
     const ai = {
       apiKey: $("apiKey").value.trim(),
