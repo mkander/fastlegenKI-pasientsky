@@ -16,8 +16,11 @@ er lokal per maskin. Innstillingene kan også eksporteres/importeres som JSON.
 ## Hvordan det virker
 
 1. **Kilde (FastlegeKI):** En flytende knapp **«Overfør tekst»** som hovrer
-   nederst til venstre inni notatfeltet (`#responseBox`). Ved klikk leses
-   notatteksten, deles på de konfigurerte overskriftene, og delene lagres.
+   nederst til venstre inni notatfeltet (`#responseBox`). Ved klikk trykker
+   utvidelsen FastlegeKI sin egen **«Kopier»**-knapp (`#copyBtn`), som legger
+   hele notatet korrekt på utklippstavlen, og bruker den teksten. Teksten
+   deles på de konfigurerte overskriftene, og delene lagres. (Reserve: leser
+   utklippstavlen, deretter notatfeltet direkte.)
 2. **Mål (PasientSky):** Et lite panel nede til venstre med **«Koble felt»**.
    Når teksten er overført fra FastlegeKI, fylles de koblede feltene automatisk.
    Panelet skjuler seg når alle 4 felt er koblet, og kommer fram igjen når du
@@ -185,6 +188,9 @@ innstillingene kommer via sync.
 - **Ta med overskriftslinjen:** Avgjør om selve overskriften limes inn sammen med
   innholdet.
 - **Kildefelt:** CSS-selektor for feltet i FastlegeKI (standard `#responseBox`).
+  Brukes til plassering av knappen og som reserve.
+- **«Kopier»-knapp:** CSS-selektor for FastlegeKI sin kopier-knapp (standard
+  `#copyBtn`). «Overfør tekst» trykker den og bruker teksten den kopierer.
 
 ## Filer
 
@@ -192,7 +198,8 @@ innstillingene kommer via sync.
 |-----|-------|
 | `manifest.json` | MV3-manifest, matcher og content scripts |
 | `util.js` | Felles hjelpere (deling, selektorer, fylling, toast) |
-| `source.js` | FastlegeKI: «Overfør tekst»-knapp |
+| `source.js` | FastlegeKI: «Overfør tekst»-knapp (bruker FastlegeKI sin «Kopier») |
+| `copyhook.js` | FastlegeKI (sidens egen kontekst): fanger teksten «Kopier» legger på utklippstavlen |
 | `destination.js` | PasientSky: lær-felt-modus + innliming (alle frames) |
 | `dialog.js` | PasientSky: KI-linje for svar og utgående melding (PasientSky og eKontakt/Helsenorge), hurtigknapper, prøvesvar-panel; linjen tegnes i hovedvinduet for felt i iframe-vinduer |
 | `early.js` | PasientSky (toppvindu, lastes først): hindrer at eKontakt-vinduet lukkes når du klikker i KI-linjen |

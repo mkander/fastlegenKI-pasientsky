@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "FastlegeKI → PasientSky",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "Overfører notattekst fra FastlegeKI til PasientSky, genererer KI-forslag til meldinger med Claude, og utvider hotstrings til tekst.",
   "permissions": [
     "storage",
@@ -26,6 +26,16 @@
     "default_title": "FastlegeKI → PasientSky"
   },
   "content_scripts": [
+    {
+      "matches": [
+        "*://*.fastlegen.com/*"
+      ],
+      "js": [
+        "copyhook.js"
+      ],
+      "world": "MAIN",
+      "run_at": "document_start"
+    },
     {
       "matches": [
         "*://*.pasientsky.no/*"

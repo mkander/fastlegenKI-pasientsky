@@ -1,7 +1,10 @@
 /* source.js — kjører på FastlegeKI (fastlegen.com).
  * Legger en flytende «Overfør tekst»-knapp som hovrer nederst til venstre inni
- * kildefeltet (#responseBox). Ved klikk:
- *   1) leser notatteksten fra kildefeltet,
+ * kildefeltet (#responseBox), eller nede til venstre i vinduet hvis feltet
+ * ikke finnes. Ved klikk:
+ *   1) henter notatet: trykker FastlegeKI sin «Kopier»-knapp (#copyBtn) og
+ *      bruker teksten den kopierer (fanget av copyhook.js). Reserve: les
+ *      utklippstavlen, deretter teksten i kildefeltet som før,
  *   2) deler den i 4 deler på de konfigurerte overskriftene,
  *   3) lagrer delene i chrome.storage,
  *   4) ber en evt. åpen PasientSky-fane om å lime inn automatisk. */
@@ -14,8 +17,12 @@
 
   let btn = null;
   let sourceSelector = "#responseBox";
+  let copyButtonSelector = "#copyBtn";
 
-  F.getSettings().then((s) => { sourceSelector = s.sourceField || "#responseBox"; });
+  F.getSettings().then((s) => {
+    sourceSelector = s.sourceField || "#responseBox";
+    copyButtonSelector = s.copyButton || "#copyBtn";
+  });
 
   function findSourceField(selector) {
     let el = null;
@@ -24,25 +31,60 @@
     return document.getElementById("responseBox"); // fallback
   }
 
+  function findCopyButton(selector) {
+    let el = null;
+    try { el = document.querySelector(selector || "#copyBtn"); } catch (e) {}
+    return el || document.getElementById("copyBtn");
+  }
+
+  // Trykk FastlegeKI sin «Kopier»-knapp og vent på teksten den kopierer
+  // (copyhook.js sender den som «flk-copied»). Faller tilbake til å lese
+  // utklippstavlen. Gir "" hvis ingenting kom.
+  function textViaCopyButton(copyBtn) {
+    return new Promise((resolve) => {
+      let done = false;
+      const finish = (t) => {
+        if (done) return;
+        done = true;
+        document.removeEventListener("flk-copied", onCopied);
+        clearTimeout(timer);
+        resolve(typeof t === "string" ? t : "");
+      };
+      const onCopied = (e) => { if (typeof e.detail === "string" && e.detail.trim()) finish(e.detail); };
+      document.addEventListener("flk-copied", onCopied);
+      const timer = setTimeout(async () => {
+        // ingen tekst fanget: prøv å lese utklippstavlen direkte
+        try { finish(await navigator.clipboard.readText()); } catch (e) { finish(""); }
+      }, 1500);
+      try { copyBtn.click(); } catch (e) { finish(""); }
+    });
+  }
+
   function readValue(el) {
     if (!el) return "";
     if (el.tagName === "TEXTAREA" || el.tagName === "INPUT") return el.value || "";
-    if (el.isContentEditable) return el.innerText || "";
-    return el.textContent || "";
+    // innerText bevarer linjeskift (<br>, blokker), som overskrifts-delingen trenger
+    return el.innerText || el.textContent || "";
   }
 
   async function transfer() {
     console.log("[FLK] Overfør tekst trykket");
     try {
       const settings = await F.getSettings();
-      const field = findSourceField(settings.sourceField);
-      if (!field) {
-        F.toast("Fant ikke kildefeltet (" + settings.sourceField + ").", "error");
-        return;
-      }
-      const text = readValue(field).trim();
+      let text = "";
+      const copyBtn = findCopyButton(settings.copyButton);
+      if (copyBtn) text = (await textViaCopyButton(copyBtn)).trim();
       if (!text) {
-        F.toast("Kildefeltet er tomt – ingen tekst å overføre.", "error");
+        // reserve: les kildefeltet direkte (slik det var før «Kopier»-knappen)
+        const field = findSourceField(settings.sourceField);
+        if (field) text = readValue(field).trim();
+        else if (!copyBtn) {
+          F.toast("Fant verken «Kopier»-knappen eller kildefeltet i FastlegeKI.", "error");
+          return;
+        }
+      }
+      if (!text) {
+        F.toast("Fant ingen notattekst å overføre.", "error");
         return;
       }
 
@@ -69,9 +111,17 @@
   function positionBtn() {
     if (!btn) return;
     const field = findSourceField(sourceSelector);
-    if (!field) { btn.style.display = "none"; return; }
-    const r = field.getBoundingClientRect();
-    if (r.width === 0 && r.height === 0) { btn.style.display = "none"; return; }
+    const r = field ? field.getBoundingClientRect() : null;
+    if (!r || (r.width === 0 && r.height === 0)) {
+      // Feltet finnes ikke (lenger): vis knappen nede til venstre hvis
+      // «Kopier»-knappen finnes, ellers skjul den.
+      btn.classList.remove("flk-fab-inbox");
+      btn.style.left = "";
+      btn.style.top = "";
+      btn.style.display = findCopyButton(copyButtonSelector) ? "" : "none";
+      return;
+    }
+    btn.classList.add("flk-fab-inbox");
     btn.style.display = "";
     const bh = btn.offsetHeight || 34;
     btn.style.left = Math.round(r.left + 10) + "px";
