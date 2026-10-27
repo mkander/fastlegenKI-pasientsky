@@ -131,7 +131,15 @@
 
 /* undermeny: knapp + meny som henger under den */
 .flk-ai-group { position: relative; display: inline-flex; }
-.flk-ai-group > .flk-ai-menu { left: 0; right: auto; min-width: 100%; }
+.flk-ai-group > .flk-ai-menu {
+  left: 0;
+  right: auto;
+  min-width: 100%;
+  box-sizing: border-box;        /* max-height inkluderer luft og kant */
+  overflow-y: auto;              /* scroll når menyen er høyere enn plassen */
+  overscroll-behavior: contain;  /* ikke scroll PasientSky bak menyen */
+}
+.flk-ai-group > .flk-ai-menu > * { flex-shrink: 0; } /* knappene skal ikke klemmes, menyen skal scrolle */
 .flk-ai-group > .flk-ai-menu .flk-ai-btn { white-space: nowrap; }
 
 /* prøvesvar-panel */
