@@ -354,7 +354,9 @@
    * enten lokalt (runGenerate/runMal) eller via toppvinduet → eierframen.
    * show(mode, getRect): getRect gir feltets posisjon i DENNE framens
    * koordinater (null = skjul). */
-  const VISIBLE_QB = 3; // antall hurtigknapper som vises direkte
+  const ICONS = window.FLK_ICONS || {
+    iconFor: () => "", groupIcon: () => "", compare: (a, b) => String(a).localeCompare(String(b))
+  };
 
   function el(tag, cls, text) {
     const n = document.createElement(tag);
@@ -474,28 +476,20 @@
       bar.appendChild(gen);
 
       // hurtigknapper for denne visningen
+      // Hurtigknapper: uten undermeny direkte på linjen (i valgt rekkefølge),
+      // deretter én nedtrekksknapp per undermeny (alfabetisk), med valgene
+      // sortert alfabetisk. Undermenyer vises bare i visninger der de har innhold.
       const btns = qbForView(mode);
-      const visible = btns.slice(0, VISIBLE_QB);
-      const overflow = btns.slice(VISIBLE_QB);
-      for (const b of visible) bar.appendChild(makeQbButton(b));
-      if (overflow.length) {
-        const more = el("button", "flk-ai-btn", "⋯");
-        more.type = "button";
-        more.title = "Flere hurtigknapper";
-        const menu = el("div", "flk-ai-menu");
-        menu.style.display = "none";
-        for (const b of overflow) {
-          const item = makeQbButton(b);
-          item.classList.add("flk-ai-menuitem");
-          menu.appendChild(item);
-        }
-        more.__flkMore = true;
-        onClick(more, (e) => {
-          e.stopPropagation();
-          menu.style.display = menu.style.display === "none" ? "" : "none";
-        });
-        bar.appendChild(more);
-        bar.appendChild(menu);
+      const groups = new Map();
+      for (const b of btns) {
+        const g = (b.group || "").trim();
+        if (!g) { bar.appendChild(makeQbButton(b)); continue; }
+        if (!groups.has(g)) groups.set(g, []);
+        groups.get(g).push(b);
+      }
+      for (const name of Array.from(groups.keys()).sort(ICONS.compare)) {
+        const items = groups.get(name).slice().sort((a, b) => ICONS.compare(a.label, b.label));
+        bar.appendChild(makeGroup(name, items));
       }
 
       if (mode === "utgaaende") {
@@ -515,8 +509,54 @@
       bar.appendChild(copyBtn);
     }
 
+    // Undermeny: åpnes ved hover (med liten forsinkelse ved utgang, så musa
+    // rekker å gå fra knappen ned i menyen) og ved klikk (berøring/tastatur).
+    function makeGroup(name, items) {
+      const wrap = el("span", "flk-ai-group");
+      const icon = ICONS.groupIcon(name);
+      const toggle = el("button", "flk-ai-btn flk-ai-grouptoggle", (icon ? icon + " " : "") + name + " ▾");
+      toggle.type = "button";
+      toggle.title = name + " (" + items.length + ")";
+      const menu = el("div", "flk-ai-menu");
+      menu.style.display = "none";
+      for (const b of items) {
+        const item = makeQbButton(b);
+        item.classList.add("flk-ai-menuitem");
+        menu.appendChild(item);
+      }
+      let closeTimer = null;
+      let hoverOpenedAt = 0;
+      const open = () => {
+        clearTimeout(closeTimer);
+        if (busy) return;
+        for (const m of bar.querySelectorAll(".flk-ai-menu")) if (m !== menu) m.style.display = "none";
+        menu.style.display = "";
+        // åpne oppover hvis det ikke er plass under linjen
+        menu.classList.remove("flk-ai-menu-up");
+        const r = menu.getBoundingClientRect();
+        if (r.bottom > window.innerHeight - 4) menu.classList.add("flk-ai-menu-up");
+      };
+      const close = () => { clearTimeout(closeTimer); menu.style.display = "none"; };
+      wrap.addEventListener("mouseenter", () => {
+        if (menu.style.display === "none") hoverOpenedAt = Date.now();
+        open();
+      });
+      wrap.addEventListener("mouseleave", () => { clearTimeout(closeTimer); closeTimer = setTimeout(close, 300); });
+      toggle.__flkMore = true;
+      onClick(toggle, (e) => {
+        e.stopPropagation();
+        // Musa åpnet menyen ved hover like før klikket: la den stå åpen
+        // (ellers ville et vanlig klikk lukke menyen igjen med en gang).
+        if (menu.style.display === "none" || Date.now() - hoverOpenedAt < 800) open(); else close();
+      });
+      wrap.appendChild(toggle);
+      wrap.appendChild(menu);
+      return wrap;
+    }
+
     function makeQbButton(b) {
-      const btn = el("button", "flk-ai-btn flk-ai-qb", (b.type === "ki" ? "✨ " : "") + b.label);
+      const icon = ICONS.iconFor(b);
+      const btn = el("button", "flk-ai-btn flk-ai-qb", (icon ? icon + " " : "") + b.label + (b.type === "ki" ? " ✨" : ""));
       btn.type = "button";
       btn.title = b.type === "ki" ? "KI-stikkord: " + (b.tekst || "") : "Fast mal settes inn umiddelbart";
       onClick(btn, (e) => {

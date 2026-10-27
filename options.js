@@ -38,6 +38,25 @@
 
   /* ==================== hurtigknapper ==================== */
 
+  const ICONS = window.FLK_ICONS;
+
+  // Forslagsliste for undermeny-feltet: alle navn som er i bruk i skjemaet.
+  function refreshGroupList() {
+    const dl = $("qbGroupList");
+    if (!dl) return;
+    const names = new Set();
+    for (const inp of document.querySelectorAll(".qb-group")) {
+      const v = inp.value.trim();
+      if (v) names.add(v);
+    }
+    dl.textContent = "";
+    for (const n of Array.from(names).sort(ICONS.compare)) {
+      const o = document.createElement("option");
+      o.value = n;
+      dl.appendChild(o);
+    }
+  }
+
   function qbRow(data) {
     data = data || {};
     const card = el("div", "card qb-card");
@@ -77,6 +96,25 @@
     grid.appendChild(mk("Type", type));
     const delWrap = el("div"); delWrap.appendChild(del); grid.appendChild(delWrap);
 
+    const group = el("input"); group.type = "text"; group.className = "qb-group";
+    group.placeholder = "Tom = direkte på linjen";
+    group.setAttribute("list", "qbGroupList");
+    group.value = data.group || "";
+    group.addEventListener("change", refreshGroupList);
+    grid.appendChild(mk("Undermeny", group));
+
+    const icon = el("input"); icon.type = "text"; icon.className = "qb-icon";
+    icon.maxLength = 8;
+    icon.value = data.icon || "";
+    grid.appendChild(mk("Ikon (tom = auto)", icon));
+
+    const preview = el("div", "qb-preview");
+    preview.title = "Slik ser knappen ut i linjen";
+    const pWrap = el("div", "qb-preview-wrap");
+    pWrap.appendChild(el("label", "", "Forhåndsvisning"));
+    pWrap.appendChild(preview);
+    grid.appendChild(pWrap);
+
     const emne = el("input"); emne.type = "text"; emne.className = "qb-emne";
     emne.placeholder = "Emne (brukes i utgående melding, kun for mal)";
     emne.value = data.emne || "";
@@ -105,6 +143,19 @@
     view.addEventListener("change", refreshVisibility);
     refreshVisibility();
 
+    function refreshPreview() {
+      const b = { label: label.value.trim(), tekst: tekst.value, emne: emne.value, type: type.value };
+      const auto = ICONS.iconFor(b);
+      icon.placeholder = auto;
+      const shown = icon.value.trim() || auto;
+      const g = group.value.trim();
+      preview.textContent = (g ? ICONS.groupIcon(g) + " " + g + " ▸ " : "") +
+        shown + " " + (b.label || "…") + (b.type === "ki" ? " ✨" : "");
+    }
+    for (const x of [label, tekst, emne, icon, group]) x.addEventListener("input", refreshPreview);
+    type.addEventListener("change", refreshPreview);
+    refreshPreview();
+
     card.appendChild(grid);
     return card;
   }
@@ -118,6 +169,7 @@
       .map((k) => all[k])
       .sort((a, b) => (a.order || 0) - (b.order || 0))
       .forEach((b) => list.appendChild(qbRow(b)));
+    refreshGroupList();
   }
 
   function collectQb() {
@@ -134,6 +186,8 @@
         emne: card.querySelector(".qb-emne").value.trim(),
         tekst: card.querySelector(".qb-tekst").value,
         notat: card.querySelector(".qb-notat").value,
+        group: card.querySelector(".qb-group").value.trim(),
+        icon: card.querySelector(".qb-icon").value.trim(),
         order: i
       };
     }

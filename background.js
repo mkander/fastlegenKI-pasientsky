@@ -443,6 +443,27 @@ async function migrateAndSeed() {
     await sSet({ __qbSeeded: true });
   }
 
+  // Engangsovergang til undermenyer: tidligere viste linjen de tre første
+  // knappene per visning og resten i ⋯-menyen. For at linjen skal se lik ut,
+  // legges «resten» i undermenyen «Flere». Knapper som allerede har et
+  // undermeny-felt røres ikke.
+  if (!sync.__qbGroupsMigrated) {
+    const fresh = await sGet(null);
+    const qb = Object.keys(fresh)
+      .filter((k) => k.indexOf("qb.") === 0 && fresh[k] && fresh[k].label)
+      .map((k) => ({ key: k, b: fresh[k] }))
+      .sort((a, b) => (a.b.order || 0) - (b.b.order || 0));
+    const direct = new Set();
+    for (const view of ["svar", "utgaaende"]) {
+      qb.filter((x) => x.b.view === view || x.b.view === "begge").slice(0, 3).forEach((x) => direct.add(x.key));
+    }
+    const upd = { __qbGroupsMigrated: true };
+    for (const x of qb) {
+      if (x.b.group === undefined) upd[x.key] = Object.assign({}, x.b, { group: direct.has(x.key) ? "" : "Flere" });
+    }
+    await sSet(upd);
+  }
+
   // Engangsoppgradering av modellvalg: Opus 4.8 → Opus 5.5 (bedre, raskere,
   // billigere). Kjøres ikke på nytt, så et senere bevisst valg av 4.8 står.
   if (!sync.__opus55Migrated) {

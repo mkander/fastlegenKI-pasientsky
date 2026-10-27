@@ -141,8 +141,19 @@ PasientSky sin «vinduet mistet fokus»-beskjed.
 
 Konfigurerbare i innstillingene, med visning (svar/utgående/begge) og type:
 **Mal** (emne/tekst/journalnotat ferdig skrevet, settes inn umiddelbart) eller
-**KI-stikkord** (fast stikkord sendes til Claude). De tre første per visning
-vises som knapper, resten i ⋯-menyen.
+**KI-stikkord** (fast stikkord sendes til Claude, merket ✨).
+
+- **Undermeny:** knapper uten undermeny vises direkte på linjen i valgt
+  rekkefølge. Knapper med samme undermeny-navn (f.eks. «Prøvesvar») samles i
+  én nedtrekksknapp som åpnes ved hover eller klikk. Undermenyene og valgene
+  i dem sorteres alfabetisk (norsk: æ, ø, å til slutt), og vises bare i
+  visninger der de har innhold.
+- **Ikon:** velges automatisk ut fra ord i etiketten og teksten (f.eks.
+  resept → 💊, prøve → 🧪, time/kontroll → 📅, sykmelding → 🛌, henvisning →
+  📨, normal/alt fint → ✅), lokalt og uten API-kall. Skriv inn et eget ikon i
+  innstillingene for å overstyre. Undermenyer får ikon ut fra navnet.
+- Ved oppgradering til 1.7.0 legges knapper som tidligere lå i ⋯-menyen i
+  undermenyen «Flere», så linjen ser lik ut til du sorterer dem selv.
 
 ## Hotstrings (tekstutvidelse)
 
@@ -201,6 +212,7 @@ innstillingene kommer via sync.
 | `source.js` | FastlegeKI: «Overfør tekst»-knapp (bruker FastlegeKI sin «Kopier») |
 | `copyhook.js` | FastlegeKI (sidens egen kontekst): fanger teksten «Kopier» legger på utklippstavlen |
 | `destination.js` | PasientSky: lær-felt-modus + innliming (alle frames) |
+| `icons.js` | Automatisk ikon og norsk alfabetisk sortering for hurtigknapper (linjen og innstillingene) |
 | `dialog.js` | PasientSky: KI-linje for svar og utgående melding (PasientSky og eKontakt/Helsenorge), hurtigknapper, prøvesvar-panel; linjen tegnes i hovedvinduet for felt i iframe-vinduer |
 | `early.js` | PasientSky (toppvindu, lastes først): hindrer at eKontakt-vinduet lukkes når du klikker i KI-linjen |
 | `ekontakt.js` | PasientSky: Alt+E åpner ny eKontakt via PasientSkys handlingskanal og trykker «Bruk aktiv pasient» |

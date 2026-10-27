@@ -127,6 +127,12 @@
   z-index: 2147483647;
 }
 .flk-ai-menuitem { text-align: left; }
+.flk-ai-menu-up { top: auto; bottom: calc(100% + 4px); }
+
+/* undermeny: knapp + meny som henger under den */
+.flk-ai-group { position: relative; display: inline-flex; }
+.flk-ai-group > .flk-ai-menu { left: 0; right: auto; min-width: 100%; }
+.flk-ai-group > .flk-ai-menu .flk-ai-btn { white-space: nowrap; }
 
 /* prøvesvar-panel */
 .flk-ai-panel {
