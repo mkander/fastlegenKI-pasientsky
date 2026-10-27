@@ -24,6 +24,8 @@
     .card .grid { display: grid; grid-template-columns: 1fr 150px 150px auto; gap: 8px; align-items: end; }
     .card label { margin: 8px 0 3px; font-size: 12px; }
     .card .full { grid-column: 1 / -1; }
+    .card .qb-preview-wrap { grid-column: 3 / -1; }
+    .qb-preview { padding: 8px 10px; border: 1px dashed #cfd6e4; border-radius: 8px; background: #fff; font-weight: 600; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .dom-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
     .dom-name { flex: 1; font-family: ui-monospace, monospace; font-size: 13px; }
     .dom-warn { color: #b3261e; font-size: 12px; }
@@ -48,8 +50,9 @@
   </select>
 
   <h2>Hurtigknapper</h2>
-  <p class="hint">Vises ved svar-/tekstfeltet i PasientSky. <b>Mal</b> settes inn umiddelbart (emne/tekst/journalnotat slik du har skrevet dem). <b>KI-stikkord</b> sendes til Claude og genereres med variasjon. De tre første per visning vises som knapper, resten i ⋯-menyen. Journalnotatet legges på utklippstavlen. Visningene gjelder både PasientSky og eKontakt (Helsenorge): «Svar» brukes ved svar, «Utgående» ved ny melding.</p>
+  <p class="hint">Vises ved svar-/tekstfeltet i PasientSky. <b>Mal</b> settes inn umiddelbart (emne/tekst/journalnotat slik du har skrevet dem). <b>KI-stikkord</b> sendes til Claude og genereres med variasjon. Knapper uten <b>undermeny</b> vises direkte på linjen i rekkefølgen under; knapper med samme undermeny samles i én nedtrekksknapp (åpnes ved hover eller klikk), sortert alfabetisk. Ikonet velges automatisk ut fra etiketten og teksten – skriv inn et eget ikon (f.eks. ⭐) for å overstyre. Journalnotatet legges på utklippstavlen. Visningene gjelder både PasientSky og eKontakt (Helsenorge): «Svar» brukes ved svar, «Utgående» ved ny melding.</p>
   <div id="qbList"></div>
+  <datalist id="qbGroupList"></datalist>
   <button id="qbAdd" class="secondary" type="button">+ Legg til knapp</button>
 
   <h2>Hotstrings (tekstutvidelse)</h2>
@@ -110,6 +113,7 @@
     <span id="status"></span>
   </div>
 
+  <script src="icons.js"></script>
   <script src="options.js"></script>
 </body>
 </html>
