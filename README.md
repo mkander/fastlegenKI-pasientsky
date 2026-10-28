@@ -147,7 +147,8 @@ Konfigurerbare i innstillingene, med visning (svar/utgående/begge) og type:
   rekkefølge. Knapper med samme undermeny-navn (f.eks. «Prøvesvar») samles i
   én nedtrekksknapp som åpnes ved hover eller klikk. Undermenyene og valgene
   i dem sorteres alfabetisk (norsk: æ, ø, å til slutt), og vises bare i
-  visninger der de har innhold.
+  visninger der de har innhold. Menyen åpnes mot siden med mest plass, og
+  har den flere valg enn det er plass til, kan du scrolle i den.
 - **Ikon:** velges automatisk ut fra ord i etiketten og teksten (f.eks.
   resept → 💊, prøve → 🧪, time/kontroll → 📅, sykmelding → 🛌, henvisning →
   📨, normal/alt fint → ✅), lokalt og uten API-kall. Skriv inn et eget ikon i

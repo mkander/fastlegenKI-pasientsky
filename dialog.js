@@ -531,10 +531,19 @@
         if (busy) return;
         for (const m of bar.querySelectorAll(".flk-ai-menu")) if (m !== menu) m.style.display = "none";
         menu.style.display = "";
-        // åpne oppover hvis det ikke er plass under linjen
+        // Åpne mot siden med mest plass, og begrens høyden til det som er
+        // ledig (scrollbar meny), så den aldri havner utenfor skjermen.
         menu.classList.remove("flk-ai-menu-up");
-        const r = menu.getBoundingClientRect();
-        if (r.bottom > window.innerHeight - 4) menu.classList.add("flk-ai-menu-up");
+        menu.style.maxHeight = "";
+        menu.scrollTop = 0;
+        const t = toggle.getBoundingClientRect();
+        const below = window.innerHeight - t.bottom - 12; // 4px avstand + marg
+        const above = t.top - 12;
+        const natural = menu.scrollHeight;
+        const up = natural > below && above > below;
+        if (up) menu.classList.add("flk-ai-menu-up");
+        const room = Math.max(120, up ? above : below);
+        if (natural > room) menu.style.maxHeight = room + "px";
       };
       const close = () => { clearTimeout(closeTimer); menu.style.display = "none"; };
       wrap.addEventListener("mouseenter", () => {
