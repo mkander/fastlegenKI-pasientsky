@@ -18,6 +18,10 @@
  *
  *   Helsenorge-svar: som PasientSky-dialog, men egen kobling.
  *
+ *   Reseptfornyelse (Helsenorge): klikk i legemiddellisten, deretter
+ *   Beskjed-feltet. Som svar, men KI-en får bare listen, merket som
+ *   forespørsel om reseptfornyelse.
+ *
  * Plassering: PasientSky-vinduer er iframer som ofte er for små til linjen.
  * Ligger feltene i en iframe rett under toppvinduet, rapporterer den framen
  * feltets posisjon til toppvinduet (postMessage), og toppvinduet tegner
@@ -69,6 +73,17 @@
         "Klikk i EMNEFELTET i eKontakt-vinduet (Helsenorge).",
         "Emnefelt koblet. Klikk nå i tekstfeltet for meldingen.",
         "eKontakt koblet! KI-linjen vises ved tekstfeltet. ✔"
+      ]
+    },
+    hnRx: {
+      mapKey: "hnRxMap", learnKey: "hnRxLearn", mode: "svar", label: "reseptfornyelse",
+      steps: ["message", "reply"],
+      listMessage: true, // klikk i legemiddellisten → hele listen (ikke navn/dato over)
+      prefix: "Forespørsel om reseptfornyelse via Helsenorge. Pasienten ber om fornyelse av:\n",
+      texts: [
+        "Klikk på legemiddellisten i reseptfornyelsen (Helsenorge).",
+        "Legemiddelliste koblet. Klikk nå i Beskjed-feltet.",
+        "Reseptfornyelse koblet! «Generer svar» vises ved Beskjed-feltet. ✔"
       ]
     },
     hnReply: {
@@ -144,7 +159,8 @@
       if (!part) return;
       e.preventDefault();
       e.stopPropagation();
-      const target = part === "message" ? messageContainerFrom(e.target) : F.editableFrom(e.target);
+      const target = part !== "message" ? F.editableFrom(e.target)
+        : (kind.listMessage && e.target.closest && e.target.closest("ul, ol")) || messageContainerFrom(e.target);
       if (!target) {
         F.toast("Det var ikke et skrivefelt – klikk i " + FIELD_NAMES[part] + ".", "error");
         return;
@@ -324,7 +340,7 @@
           materiale: opts.materiale ? scrubMateriale(opts.materiale) : ""
         };
       } else {
-        const melding = await getPatientMessage(kindName);
+        const melding = (KINDS[kindName].prefix || "") + await getPatientMessage(kindName);
         payload = { action: "flkGenerate", mode: "svar", stikkord: opts.stikkord || "", melding };
       }
       const resp = await sendToBackground(payload);
@@ -757,7 +773,7 @@
       if (subjEl && bodyEl) return { kind: name, anchor: bodyEl };
     }
     let best = null;
-    for (const name of ["hnReply", "dialog"]) {
+    for (const name of ["hnRx", "hnReply", "dialog"]) {
       const m = maps[name];
       const replyEl = ownedEl(m.reply);
       if (!replyEl) continue;
@@ -935,7 +951,8 @@
     startDialogLearn: "dialog",
     startOutgoingLearn: "outgoing",
     startHnOutLearn: "hnOut",
-    startHnReplyLearn: "hnReply"
+    startHnReplyLearn: "hnReply",
+    startHnRxLearn: "hnRx"
   };
   try {
     if (chrome && chrome.runtime && chrome.runtime.onMessage) {

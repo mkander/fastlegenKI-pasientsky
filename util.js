@@ -4,7 +4,7 @@
 (function () {
   "use strict";
   if (window.FLK) return; // unngå dobbel-injeksjon (PasientSky har mange frames)
-  console.log("[FLK] util.js v15 lastet i", location.href);
+  console.log("[FLK] util.js v16 lastet i", location.href);
 
   const DEFAULTS = {
     headings: ["OVERSKRIFT1", "OVERSKRIFT2", "OVERSKRIFT3", "OVERSKRIFT4"],
@@ -26,7 +26,7 @@
      Defensive: noen PasientSky-iframes er sandboxed/opaque-origin der
      content-scriptet kjører, men chrome.storage-API-et ikke finnes. Da
      resolver vi tomt i stedet for å kaste. */
-  const SYNC_KEYS = ["settings", "ai", "fieldMap", "dialogMap", "outgoingMap", "hnOutMap", "hnReplyMap", "hsDomains"];
+  const SYNC_KEYS = ["settings", "ai", "fieldMap", "dialogMap", "outgoingMap", "hnOutMap", "hnReplyMap", "hnRxMap", "hsDomains"];
   const SYNC_PREFIXES = ["hs.", "qb."];
   function isSyncKey(k) {
     if (SYNC_KEYS.indexOf(k) !== -1) return true;
