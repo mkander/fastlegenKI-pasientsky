@@ -106,6 +106,12 @@ kobles derfor for seg (popupen):
    (Helsenorge)»**, klikk i emnefeltet og deretter i tekstfeltet.
 2. **Svar:** popup → **«Koble eKontakt – svar (Helsenorge)»**. Klikk på
    pasientens melding, deretter i svarfeltet.
+3. **Reseptfornyelse:** åpne en reseptfornyelse fra Helsenorge, popup →
+   **«Koble reseptfornyelse – svar (Helsenorge)»**. Klikk på legemiddellisten
+   under «Forespørsel om reseptfornyelse», deretter i «Beskjed»-feltet.
+   Svar-knapperaden vises da i reseptfornyelser. KI-en får bare
+   legemiddellisten (ikke navn/dato), merket som forespørsel om
+   reseptfornyelse, og svarhurtigknappene (f.eks. «Resept sendt») virker.
 
 **Alt+E** åpner ny eKontakt fra hvor som helst i PasientSky, også mens du
 skriver i et felt. Utvidelsen sender samme handling som PasientSky selv bruker

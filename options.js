@@ -333,8 +333,9 @@
   }
 
   async function renderDialog() {
-    const { dialogMap, outgoingMap, hnOutMap, hnReplyMap } =
-      await sGet(["dialogMap", "outgoingMap", "hnOutMap", "hnReplyMap"]);
+    const { dialogMap, outgoingMap, hnOutMap, hnReplyMap, hnRxMap } =
+      await sGet(["dialogMap", "outgoingMap", "hnOutMap", "hnReplyMap", "hnRxMap"]);
+    const rx = hnRxMap || {};
     const dm = dialogMap || {};
     const om = outgoingMap || {};
     const ho = hnOutMap || {};
@@ -352,7 +353,9 @@
       line("eKontakt – emnefelt", ho.subject) + "\n" +
       line("eKontakt – tekstfelt", ho.body) + "\n" +
       line("Helsenorge-svar – pasientmelding", hr.message) + "\n" +
-      line("Helsenorge-svar – svarfelt", hr.reply);
+      line("Helsenorge-svar – svarfelt", hr.reply) + "\n" +
+      line("Reseptfornyelse – legemiddelliste", rx.message) + "\n" +
+      line("Reseptfornyelse – Beskjed-felt", rx.reply);
   }
 
   /* ==================== last inn / lagre ==================== */
@@ -415,7 +418,7 @@
 
   /* ==================== eksport / import ==================== */
 
-  const EXPORT_KEYS = ["settings", "ai", "fieldMap", "dialogMap", "outgoingMap", "hnOutMap", "hnReplyMap", "hsDomains"];
+  const EXPORT_KEYS = ["settings", "ai", "fieldMap", "dialogMap", "outgoingMap", "hnOutMap", "hnReplyMap", "hnRxMap", "hsDomains"];
   function exportable(k) {
     return EXPORT_KEYS.indexOf(k) !== -1 || k.indexOf("hs.") === 0 || k.indexOf("qb.") === 0;
   }
@@ -489,8 +492,8 @@
   });
   $("resetHn").addEventListener("click", async () => {
     try {
-      await sSet({ hnOutMap: {}, hnReplyMap: {} });
-      await lSet({ hnOutLearn: { active: false, step: 0 }, hnReplyLearn: { active: false, step: 0 } });
+      await sSet({ hnOutMap: {}, hnReplyMap: {}, hnRxMap: {} });
+      await lSet({ hnOutLearn: { active: false, step: 0 }, hnReplyLearn: { active: false, step: 0 }, hnRxLearn: { active: false, step: 0 } });
     } catch (err) { alert("Lagring feilet: " + err.message); }
     renderDialog();
   });
@@ -498,7 +501,7 @@
   chrome.storage.onChanged.addListener((c, area) => {
     if (area !== "sync") return;
     if (c.fieldMap) renderMap();
-    if (c.dialogMap || c.outgoingMap || c.hnOutMap || c.hnReplyMap) renderDialog();
+    if (c.dialogMap || c.outgoingMap || c.hnOutMap || c.hnReplyMap || c.hnRxMap) renderDialog();
     if (c.hsDomains) renderDomains();
   });
 
