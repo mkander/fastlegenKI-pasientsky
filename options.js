@@ -196,19 +196,103 @@
 
   /* ==================== hotstrings ==================== */
 
-  function hsRow(code, text) {
+  // Lagret verdi: ren tekst (standard: etter skilletegn, ingen hurtigtast)
+  // eller { text, trigger: "instant"?, hotkey? }.
+  function hsNorm(v) {
+    if (typeof v === "string") return { text: v, trigger: "delim", hotkey: "" };
+    if (v && typeof v === "object") {
+      return {
+        text: typeof v.text === "string" ? v.text : "",
+        trigger: v.trigger === "instant" ? "instant" : "delim",
+        hotkey: typeof v.hotkey === "string" ? v.hotkey : ""
+      };
+    }
+    return { text: "", trigger: "delim", hotkey: "" };
+  }
+
+  // Samme normalisering som i hotstrings.js: "Ctrl+Alt+Shift+Meta+<tast>",
+  // der tasten er fysisk tast (e.code) med "Key"/"Digit" fjernet.
+  const MODIFIER_CODES = /^(Control|Shift|Alt|Meta|OS)(Left|Right)?$|^(CapsLock|NumLock|ScrollLock|Fn|FnLock|AltGraph)$/;
+  function hotkeyFromEvent(e) {
+    const code = e.code || "";
+    if (!code || MODIFIER_CODES.test(code)) return "";
+    const name = code.replace(/^Key(?=[A-Z]$)/, "").replace(/^Digit(?=\d$)/, "");
+    const mods = [];
+    if (e.ctrlKey) mods.push("Ctrl");
+    if (e.altKey) mods.push("Alt");
+    if (e.shiftKey) mods.push("Shift");
+    if (e.metaKey) mods.push("Meta");
+    return mods.concat(name).join("+");
+  }
+
+  // Returnerer feilmelding (hurtigtasten kan ikke brukes), advarsel, eller "".
+  function hotkeyProblem(hk) {
+    const parts = hk.split("+");
+    const key = parts[parts.length - 1];
+    const mods = parts.slice(0, -1);
+    const strong = mods.some((m) => m === "Ctrl" || m === "Alt" || m === "Meta");
+    const bareOk = /^Numpad/.test(key) || /^F\d{1,2}$/.test(key);
+    if (!strong && !bareOk) {
+      return { error: "«" + hk + "» kan ikke brukes alene — da kan du ikke skrive tegnet. Bruk numpad, en F-tast, eller legg til Ctrl/Alt." };
+    }
+    if (mods.indexOf("Ctrl") !== -1 && mods.indexOf("Alt") !== -1 && /^[A-Z0-9]$/.test(key)) {
+      return { warning: "«" + hk + "» er det samme som AltGr på norsk tastatur og kan ta over tegn som @, {, $ og €." };
+    }
+    return {};
+  }
+
+  function hotkeyInput(value) {
+    const inp = el("input");
+    inp.type = "text";
+    inp.className = "hs-hotkey";
+    inp.readOnly = true;
+    inp.placeholder = "Hurtigtast (klikk og trykk)";
+    inp.title = "Klikk og trykk tastekombinasjonen. Delete/Backspace fjerner, Esc avbryter.";
+    inp.value = value || "";
+    inp.addEventListener("focus", () => { inp.dataset.prev = inp.value; inp.placeholder = "Trykk tast…"; });
+    inp.addEventListener("blur", () => { inp.placeholder = "Hurtigtast (klikk og trykk)"; });
+    inp.addEventListener("keydown", (e) => {
+      const plain = !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey;
+      if (plain && e.key === "Tab") return; // la Tab navigere videre
+      e.preventDefault();
+      e.stopPropagation();
+      if (plain && e.key === "Escape") { inp.value = inp.dataset.prev || ""; inp.blur(); return; }
+      if (plain && (e.key === "Backspace" || e.key === "Delete")) { inp.value = ""; return; }
+      const hk = hotkeyFromEvent(e);
+      if (hk) inp.value = hk;
+    });
+    return inp;
+  }
+
+  function hsRow(code, value) {
+    const v = hsNorm(value);
     const row = el("div", "hs-grid hs-row");
     const codeIn = el("input"); codeIn.type = "text"; codeIn.className = "hs-code";
     codeIn.placeholder = "kode (feks mvh)"; codeIn.value = code || "";
     const textIn = document.createElement("textarea");
     textIn.className = "hs-text";
     textIn.placeholder = "Tekst som settes inn. {dato} og {kursor} kan brukes.";
-    textIn.value = text || "";
+    textIn.value = v.text;
+
+    const opts = el("div", "hs-opts");
+    const trig = document.createElement("select");
+    trig.className = "hs-trigger";
+    trig.title = "Når koden skal byttes ut med teksten";
+    for (const [val, label] of [["delim", "Etter mellomrom/enter/tab"], ["instant", "Umiddelbart"]]) {
+      const o = document.createElement("option");
+      o.value = val; o.textContent = label;
+      trig.appendChild(o);
+    }
+    trig.value = v.trigger;
+    opts.appendChild(trig);
+    opts.appendChild(hotkeyInput(v.hotkey));
+
     const del = el("button", "danger small", "Slett");
     del.type = "button";
     del.addEventListener("click", () => row.remove());
     row.appendChild(codeIn);
     row.appendChild(textIn);
+    row.appendChild(opts);
     row.appendChild(del);
     return row;
   }
@@ -223,15 +307,44 @@
       .forEach((k) => list.appendChild(hsRow(k.slice(3), all[k])));
   }
 
+  // Returnerer { out, errors, warnings }. Feil stopper lagringen.
   function collectHs() {
     const out = {};
+    const errors = [];
+    const warnings = [];
+    const hkSeen = {};
+    const rows = [];
     for (const row of document.querySelectorAll(".hs-row")) {
       const code = row.querySelector(".hs-code").value.trim().toLowerCase();
       const text = row.querySelector(".hs-text").value;
-      if (!code || /\s/.test(code) || !text) continue; // koder er ett ord
-      out["hs." + code] = text;
+      const trigger = row.querySelector(".hs-trigger").value;
+      const hotkey = row.querySelector(".hs-hotkey").value.trim();
+      if (!code && !text && !hotkey) continue; // tom rad
+      if (!code) { errors.push("En hotstring mangler kode (legg inn en kode, gjerne en «dummy»-kode hvis du bare bruker hurtigtasten)."); continue; }
+      if (/\s/.test(code)) { errors.push("Koden «" + code + "» kan ikke inneholde mellomrom."); continue; }
+      if (!text) continue;
+      if (("hs." + code) in out) { errors.push("Koden «" + code + "» er brukt flere ganger."); continue; }
+      if (hotkey) {
+        const p = hotkeyProblem(hotkey);
+        if (p.error) errors.push(p.error);
+        if (p.warning) warnings.push(p.warning);
+        if (hkSeen[hotkey]) errors.push("Hurtigtasten «" + hotkey + "» er brukt på både «" + hkSeen[hotkey] + "» og «" + code + "».");
+        else hkSeen[hotkey] = code;
+      }
+      rows.push({ code, trigger });
+      out["hs." + code] = (trigger === "instant" || hotkey)
+        ? Object.assign({ text }, trigger === "instant" ? { trigger: "instant" } : {}, hotkey ? { hotkey } : {})
+        : text; // standardvalg lagres som ren tekst, som før
     }
-    return out;
+    for (const a of rows) {
+      if (a.trigger !== "instant") continue;
+      for (const b of rows) {
+        if (b.code !== a.code && b.code.indexOf(a.code) === 0) {
+          warnings.push("«" + b.code + "» nås aldri, fordi «" + a.code + "» utløses umiddelbart når du skriver starten av den.");
+        }
+      }
+    }
+    return { out, errors, warnings };
   }
 
   /* ==================== domener ==================== */
@@ -393,7 +506,14 @@
     };
 
     const qb = collectQb();
-    const hs = collectHs();
+    const hsRes = collectHs();
+    const hs = hsRes.out;
+    const st = $("status");
+    if (hsRes.errors.length) {
+      st.style.color = "#b3261e";
+      st.textContent = "Ikke lagret: " + hsRes.errors.join(" ");
+      return;
+    }
 
     // fjern qb./hs.-nøkler som ikke lenger finnes i skjemaet
     const all = await sGet(null);
@@ -401,13 +521,17 @@
       (k) => (k.indexOf("qb.") === 0 && !(k in qb)) || (k.indexOf("hs.") === 0 && !(k in hs))
     );
 
-    const st = $("status");
     try {
       if (stale.length) await sRemove(stale);
       await sSet(Object.assign({ settings, ai }, qb, hs));
-      st.style.color = "";
-      st.textContent = "Lagret ✔";
-      setTimeout(() => (st.textContent = ""), 2000);
+      if (hsRes.warnings.length) {
+        st.style.color = "#a15c00";
+        st.textContent = "Lagret ✔ — merk: " + hsRes.warnings.join(" ");
+      } else {
+        st.style.color = "";
+        st.textContent = "Lagret ✔";
+        setTimeout(() => (st.textContent = ""), 2000);
+      }
     } catch (err) {
       st.style.color = "#b3261e";
       st.textContent = "Lagring feilet: " + (err && err.message ? err.message : err);

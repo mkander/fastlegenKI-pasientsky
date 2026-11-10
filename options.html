@@ -29,7 +29,11 @@
     .dom-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
     .dom-name { flex: 1; font-family: ui-monospace, monospace; font-size: 13px; }
     .dom-warn { color: #b3261e; font-size: 12px; }
-    .hs-grid { display: grid; grid-template-columns: 140px 1fr auto; gap: 8px; align-items: start; margin-top: 8px; }
+    .hs-grid { display: grid; grid-template-columns: 140px 1fr 210px auto; gap: 8px; align-items: start; margin-top: 8px; }
+    .hs-opts { display: flex; flex-direction: column; gap: 6px; }
+    .hs-opts select, .hs-opts input { font-size: 12.5px; padding: 6px 8px; }
+    .hs-hotkey { font-family: ui-monospace, monospace; cursor: pointer; }
+    .hs-hotkey:focus { outline: 2px solid #0052e6; outline-offset: 0; background: #eef3ff; }
     .sticky-save { position: sticky; bottom: 0; background: #fff; padding: 10px 0 16px; border-top: 1px solid #e2e6ee; margin-top: 26px; }
   </style>
 </head>
@@ -56,7 +60,8 @@
   <button id="qbAdd" class="secondary" type="button">+ Legg til knapp</button>
 
   <h2>Hotstrings (tekstutvidelse)</h2>
-  <p class="hint">Skriv koden i et tekstfelt og trykk mellomrom/enter/tab, så byttes den ut med teksten. Plassholdere: <code>{dato}</code> (dagens dato) og <code>{kursor}</code> (markørposisjon; skilletegnet slukes). Backspace rett etter en utvidelse gjenoppretter koden. Fungerer aldri i passordfelt.</p>
+  <p class="hint">Skriv koden i et tekstfelt og trykk mellomrom/enter/tab, så byttes den ut med teksten. Velg <b>Umiddelbart</b> for at koden skal byttes ut straks siste tegn er skrevet (tips: start slike koder med f.eks. <code>,</code> eller <code>#</code>, så de ikke utløses midt i vanlige ord). Plassholdere: <code>{dato}</code> (dagens dato) og <code>{kursor}</code> (markørposisjon; skilletegnet slukes). Backspace rett etter en utvidelse gjenoppretter koden. Fungerer aldri i passordfelt.</p>
+  <p class="hint"><b>Hurtigtast:</b> klikk i feltet og trykk tasten, f.eks. <code>Numpad1</code>, <code>F8</code> eller <code>Ctrl+Shift+M</code> (Delete/Backspace fjerner, Esc avbryter). Teksten settes da inn ved markøren når du står i et tekstfelt; ellers virker tasten som vanlig. Numpad skilles fra tallraden og virker også med NumLock av. Vanlige bokstaver/tall krever Ctrl eller Alt. Chrome-snarveier som Ctrl+T/Ctrl+W/Ctrl+N kan ikke overstyres. Hurtigtasten virker i tillegg til koden.</p>
   <div id="hsList"></div>
   <button id="hsAdd" class="secondary" type="button">+ Legg til hotstring</button>
 

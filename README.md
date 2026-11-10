@@ -170,6 +170,25 @@ koden byttes ut med teksten du har definert i innstillingene. Plassholdere:
 Backspace rett etter en utvidelse gjenoppretter koden. Aldri aktiv i
 passordfelt.
 
+- **Utløser:** hver hotstring kan settes til «Etter mellomrom/enter/tab»
+  (standard) eller «Umiddelbart» — da byttes koden ut straks siste tegn er
+  skrevet, uten skilletegn. Koden må stå som eget ord. Start gjerne slike
+  koder med et prefiks (`,mvh`, `#us`), så de ikke utløses midt i vanlige
+  ord; innstillingene advarer hvis en umiddelbar kode gjør en lengre kode
+  uoppnåelig.
+- **Hurtigtast:** hver hotstring kan i tillegg få en tastekombinasjon, f.eks.
+  `Numpad1`, `F8` eller `Ctrl+Shift+M`. Teksten settes inn ved markøren
+  (erstatter ev. markert tekst) når du står i et tekstfelt — ellers virker
+  tasten som vanlig. Tastene gjenkjennes på fysisk tast, så numpad skilles
+  fra tallraden og virker også med NumLock av. Numpad- og F-taster kan
+  brukes alene; bokstaver/tall krever Ctrl eller Alt (`Ctrl+Alt+bokstav`
+  gir advarsel, siden det er AltGr på norsk tastatur). Samme hurtigtast kan
+  ikke brukes to ganger. Hurtigtaster virker på de samme domenene som
+  hotstrings.
+- Lagringsformat: `hs.<kode>` er ren tekst for standardvalg, og et objekt
+  `{ text, trigger: "instant", hotkey }` ellers. **Oppdater alle maskiner**
+  til 1.9.0 — en eldre innstillingsside forstår ikke objektformatet.
+
 Aktive domener styres i innstillingene (standard: pasientsky.no og
 fastlegen.com). Nye domener krever en engangs-tillatelse per maskin — Chrome
 spør når du legger til domenet, og på andre maskiner vises en

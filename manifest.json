@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "FastlegeKI → PasientSky",
-  "version": "1.8.0",
-  "description": "Overfører notattekst fra FastlegeKI til PasientSky, genererer KI-forslag til meldinger med Claude, og utvider hotstrings til tekst.",
+  "version": "1.9.0",
+  "description": "Overfører notattekst fra FastlegeKI til PasientSky, genererer KI-forslag til meldinger med Claude, og utvider hotstrings til tekst (også via hurtigtaster).",
   "permissions": [
     "storage",
     "activeTab",
