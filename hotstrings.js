@@ -6,7 +6,14 @@
  * mellomrom/enter/tab — koden byttes ut med teksten definert i innstillingene
  * (sync-nøkler "hs.<kode>"). Plassholdere: {dato} (dagens dato, dd.mm.åååå) og
  * {kursor} (hvor markøren skal stå; skilletegnet slukes da). Backspace rett
- * etter en utvidelse gjenoppretter koden. Aldri aktiv i passordfelt. */
+ * etter en utvidelse gjenoppretter koden. Aldri aktiv i passordfelt.
+ *
+ * Verdien kan også være et objekt { text, trigger, hotkey }:
+ *  - trigger "instant": utvides straks siste tegn i koden skrives (uten
+ *    mellomrom/enter/tab). Ellers (standard) etter skilletegn.
+ *  - hotkey: tastekombinasjon (f.eks. "Numpad1", "Ctrl+Shift+M", "F8") som
+ *    setter inn teksten ved markøren i et tekstfelt. Fysisk tast (e.code),
+ *    så numpad skilles fra tallraden og virker også med NumLock av. */
 (function () {
   "use strict";
   if (window.__flkHotstrings) return; // unngå dobbel-injeksjon
@@ -19,18 +26,38 @@
   if (!storageOk()) return;
 
   /* ---------------- tabell over hotstrings ---------------- */
-  let table = {}; // kode (små bokstaver) -> tekst
+  let table = {};   // kode (små bokstaver) -> { text, instant }
+  let hotkeys = {}; // normalisert tastekombinasjon -> tekst
+
+  // Lagret verdi er enten ren tekst (gammelt format) eller et objekt.
+  function normEntry(v) {
+    if (typeof v === "string") return { text: v, instant: false, hotkey: "" };
+    if (v && typeof v === "object" && typeof v.text === "string") {
+      return {
+        text: v.text,
+        instant: v.trigger === "instant",
+        hotkey: typeof v.hotkey === "string" ? v.hotkey : ""
+      };
+    }
+    return null;
+  }
 
   function loadTable() {
     try {
       chrome.storage.sync.get(null, (all) => {
         void (chrome.runtime && chrome.runtime.lastError);
-        table = {};
+        const t = {};
+        const h = {};
         for (const k of Object.keys(all || {})) {
-          if (k.indexOf("hs.") === 0 && typeof all[k] === "string") {
-            table[k.slice(3).toLowerCase()] = all[k];
-          }
+          if (k.indexOf("hs.") !== 0) continue;
+          const e = normEntry(all[k]);
+          if (!e || !e.text) continue;
+          const code = k.slice(3).toLowerCase();
+          if (code) t[code] = { text: e.text, instant: e.instant };
+          if (e.hotkey) h[e.hotkey] = e.text;
         }
+        table = t;
+        hotkeys = h;
       });
     } catch (e) {}
   }
@@ -39,14 +66,26 @@
   try {
     chrome.storage.onChanged.addListener((changes, area) => {
       if (area !== "sync") return;
-      for (const k of Object.keys(changes)) {
-        if (k.indexOf("hs.") !== 0) continue;
-        const code = k.slice(3).toLowerCase();
-        if (changes[k].newValue == null) delete table[code];
-        else table[code] = changes[k].newValue;
-      }
+      if (Object.keys(changes).some((k) => k.indexOf("hs.") === 0)) loadTable();
     });
   } catch (e) {}
+
+  /* ---------------- hurtigtaster ---------------- */
+  const MODIFIER_CODES = /^(Control|Shift|Alt|Meta|OS)(Left|Right)?$|^(CapsLock|NumLock|ScrollLock|Fn|FnLock|AltGraph)$/;
+
+  // Samme normalisering som i options.js: "Ctrl+Alt+Shift+Meta+<tast>",
+  // der tasten er e.code med "Key"/"Digit" fjernet (KeyM -> M, Digit1 -> 1).
+  function hotkeyFromEvent(e) {
+    const code = e.code || "";
+    if (!code || MODIFIER_CODES.test(code)) return "";
+    const name = code.replace(/^Key(?=[A-Z]$)/, "").replace(/^Digit(?=\d$)/, "");
+    const mods = [];
+    if (e.ctrlKey) mods.push("Ctrl");
+    if (e.altKey) mods.push("Alt");
+    if (e.shiftKey) mods.push("Shift");
+    if (e.metaKey) mods.push("Meta");
+    return mods.concat(name).join("+");
+  }
 
   /* ---------------- plassholdere ---------------- */
   function todayNo() {
@@ -82,20 +121,26 @@
     return null;
   }
 
-  function wordBeforeCaretInput(el) {
+  // Ordet (ikke-blanke tegn) rett før markøren. allowEmpty: returner ""
+  // når markøren står først i feltet eller etter et blankt tegn (brukes for
+  // umiddelbare koder, der siste tegn ennå ikke er skrevet).
+  function wordBeforeCaretInput(el, allowEmpty) {
     const pos = el.selectionStart;
     if (pos == null || pos !== el.selectionEnd) return null;
     const m = el.value.slice(0, pos).match(/(\S+)$/);
-    return m ? { word: m[1] } : null;
+    if (m) return { word: m[1] };
+    return allowEmpty ? { word: "" } : null;
   }
 
-  function wordBeforeCaretCE() {
+  function wordBeforeCaretCE(allowEmpty) {
     const sel = window.getSelection();
     if (!sel || sel.rangeCount === 0 || !sel.isCollapsed) return null;
     const node = sel.anchorNode;
-    if (!node || node.nodeType !== 3) return null; // må stå i en tekstnode
+    if (!node) return null;
+    if (node.nodeType !== 3) return allowEmpty ? { word: "" } : null; // tomt felt/ny linje
     const m = node.textContent.slice(0, sel.anchorOffset).match(/(\S+)$/);
-    return m ? { word: m[1] } : null;
+    if (m) return { word: m[1] };
+    return allowEmpty ? { word: "" } : null;
   }
 
   function setNativeValue(el, value) {
@@ -126,10 +171,13 @@
   }
 
   /* ---------------- utvidelse ---------------- */
+  // Bytter ut wordLen tegn før markøren (og ev. markert tekst) med teksten.
   function expandInput(el, wordLen, exp) {
-    const pos = el.selectionStart;
-    const before = el.value.slice(0, pos - wordLen);
-    const after = el.value.slice(pos);
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+    if (start == null || end == null) return false;
+    const before = el.value.slice(0, start - wordLen);
+    const after = el.value.slice(end);
     setNativeValue(el, before + exp.text + after);
     let caret = before.length + exp.text.length;
     if (exp.caretBack > 0) caret -= exp.caretBack;
@@ -174,7 +222,7 @@
 
   /* ---------------- backspace-angring ---------------- */
   // Husker siste utvidelse; backspace umiddelbart etter gjenoppretter koden.
-  let lastExp = null; // { el, kind, code, text }
+  let lastExp = null; // { el, kind, code, text, delim } (delim: skilletegn etter teksten, 0/1)
 
   function tryUndo(e) {
     const le = lastExp;
@@ -187,9 +235,10 @@
         const pos = el.selectionStart;
         if (pos == null || pos !== el.selectionEnd) return;
         const val = el.value;
-        // forventer [utvidelse][skilletegn] eller bare [utvidelse] før markøren
-        let n = le.text.length + 1;
-        if (val.slice(pos - n, pos - 1) !== le.text) {
+        // forventer [utvidelse][skilletegn] (eller bare [utvidelse] — umiddelbar
+        // kode, eller siden slukte skilletegnet) før markøren
+        let n = le.text.length + le.delim;
+        if (val.slice(pos - n, pos - le.delim) !== le.text) {
           n = le.text.length;
           if (val.slice(pos - n, pos) !== le.text) return;
         }
@@ -203,7 +252,7 @@
       } else {
         const sel = window.getSelection();
         if (!sel || !sel.isCollapsed || !le.el.contains(sel.anchorNode)) return;
-        for (let i = 0; i < le.text.length + 1; i++) sel.modify("extend", "backward", "character");
+        for (let i = 0; i < le.text.length + le.delim; i++) sel.modify("extend", "backward", "character");
         let ok = false;
         try { ok = document.execCommand("insertText", false, le.code); } catch (e2) {}
         if (ok) { e.preventDefault(); e.stopPropagation(); }
@@ -213,35 +262,83 @@
   }
 
   /* ---------------- hovedlytter ---------------- */
+  function expandAt(t, wordLen, exp) {
+    return t.kind === "input"
+      ? expandInput(t.el, wordLen, exp)
+      : expandCE(t.el, wordLen, exp);
+  }
+
+  function stop(e) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+
+  // Hurtigtast: sett inn teksten ved markøren (erstatter ev. markering).
+  function tryHotkey(e) {
+    const hk = hotkeyFromEvent(e);
+    if (!hk || !Object.prototype.hasOwnProperty.call(hotkeys, hk)) return false;
+    const t = resolveTarget(e);
+    if (!t) return false; // utenfor tekstfelt: la tasten gå videre til siden
+    if (e.repeat) { stop(e); return true; } // holdt nede: ikke sett inn flere ganger
+    if (expandAt(t, 0, prepare(hotkeys[hk]))) stop(e);
+    return true;
+  }
+
+  // Umiddelbar kode: tasten som fullfører koden slukes, og ordet byttes ut.
+  function tryInstant(e) {
+    if (e.key.length !== 1 || /\s/.test(e.key)) return false;
+    const altGr = !!(e.getModifierState && e.getModifierState("AltGraph"));
+    if ((e.ctrlKey || e.altKey || e.metaKey) && !altGr) return false;
+    const t = resolveTarget(e);
+    if (!t) return false;
+    const info = t.kind === "input" ? wordBeforeCaretInput(t.el, true) : wordBeforeCaretCE(true);
+    if (!info) return false;
+    const typed = info.word + e.key;
+    const code = typed.toLowerCase();
+    if (!Object.prototype.hasOwnProperty.call(table, code)) return false;
+    const entry = table[code];
+    if (!entry.instant) return false;
+
+    const exp = prepare(entry.text);
+    if (!expandAt(t, info.word.length, exp)) return false;
+    stop(e);
+    if (exp.caretBack < 0) lastExp = { el: t.el, kind: t.kind, code: typed, text: exp.text, delim: 0 };
+    return true;
+  }
+
+  // Vanlig kode: utvides når mellomrom/enter/tab trykkes etter koden.
+  function tryDelimited(e) {
+    const t = resolveTarget(e);
+    if (!t) return;
+    const info = t.kind === "input" ? wordBeforeCaretInput(t.el) : wordBeforeCaretCE();
+    if (!info) return;
+    const code = info.word.toLowerCase();
+    if (!Object.prototype.hasOwnProperty.call(table, code)) return;
+    const entry = table[code];
+    if (entry.instant) return; // umiddelbare koder utvides bare mens de skrives
+
+    const exp = prepare(entry.text);
+    if (!expandAt(t, info.word.length, exp)) return;
+
+    if (exp.caretBack >= 0) {
+      // {kursor}: sluk skilletegnet, ellers havner det midt i teksten
+      stop(e);
+    } else {
+      lastExp = { el: t.el, kind: t.kind, code: info.word, text: exp.text, delim: 1 };
+    }
+  }
+
   document.addEventListener(
     "keydown",
     function (e) {
       if (e.isComposing) return;
+      if (tryHotkey(e)) { lastExp = null; return; }
       if (e.key === "Backspace") { tryUndo(e); return; }
-      const isDelim = e.key === " " || e.key === "Enter" || e.key === "Tab";
       lastExp = null;
+      if (tryInstant(e)) return;
+      const isDelim = e.key === " " || e.key === "Enter" || e.key === "Tab";
       if (!isDelim || e.ctrlKey || e.metaKey || e.altKey) return;
-
-      const t = resolveTarget(e);
-      if (!t) return;
-      const info = t.kind === "input" ? wordBeforeCaretInput(t.el) : wordBeforeCaretCE();
-      if (!info) return;
-      const code = info.word.toLowerCase();
-      if (!Object.prototype.hasOwnProperty.call(table, code)) return;
-
-      const exp = prepare(table[code]);
-      const ok = t.kind === "input"
-        ? expandInput(t.el, info.word.length, exp)
-        : expandCE(t.el, info.word.length, exp);
-      if (!ok) return;
-
-      if (exp.caretBack >= 0) {
-        // {kursor}: sluk skilletegnet, ellers havner det midt i teksten
-        e.preventDefault();
-        e.stopPropagation();
-      } else {
-        lastExp = { el: t.el, kind: t.kind, code: info.word, text: exp.text };
-      }
+      tryDelimited(e);
     },
     true // capture: foran sidens egne handlere (f.eks. send-på-enter)
   );
