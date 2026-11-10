@@ -170,6 +170,15 @@
     } catch (e) { return false; }
   }
 
+  // Rike editorer (Draft.js i PasientSky-journalen, m.fl.) har en egen
+  // markeringsmodell som bare oppdateres når «selectionchange» kommer — og
+  // den kommer asynkront. Uten dette setter editoren inn teksten der den
+  // tror markøren står, og koden vi markerte blir stående igjen. Et
+  // synkront selectionchange får editoren til å lese inn markeringen først.
+  function syncSelection() {
+    try { document.dispatchEvent(new Event("selectionchange")); } catch (e) {}
+  }
+
   /* ---------------- utvidelse ---------------- */
   // Bytter ut wordLen tegn før markøren (og ev. markert tekst) med teksten.
   function expandInput(el, wordLen, exp) {
@@ -192,6 +201,7 @@
     try {
       for (let i = 0; i < wordLen; i++) sel.modify("extend", "backward", "character");
     } catch (e) { return false; }
+    if (wordLen > 0) syncSelection();
     let ok = pasteInto(el, exp.text);
     if (!ok) {
       try { ok = document.execCommand("insertText", false, exp.text); } catch (e) {}
@@ -253,6 +263,7 @@
         const sel = window.getSelection();
         if (!sel || !sel.isCollapsed || !le.el.contains(sel.anchorNode)) return;
         for (let i = 0; i < le.text.length + le.delim; i++) sel.modify("extend", "backward", "character");
+        syncSelection();
         let ok = false;
         try { ok = document.execCommand("insertText", false, le.code); } catch (e2) {}
         if (ok) { e.preventDefault(); e.stopPropagation(); }
